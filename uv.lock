@@ -445,7 +445,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "jax", specifier = ">=0.8.0" },
+    { name = "jax", specifier = ">=0.6.2" },
     { name = "jaxtyping", specifier = ">=0.3.3" },
     { name = "loguru", specifier = ">=0.7.3" },
     { name = "orbax", specifier = ">=0.1.9" },
