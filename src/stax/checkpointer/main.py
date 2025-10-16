@@ -37,22 +37,28 @@ class Checkpointer:
      )
 
   def restore(self, state: PyTree) -> dict[str, PyTree]:
-        if self.load is None:
-           raise ValueError("No latest checkpoint found")
+         if self.load is None:
+            raise ValueError("No latest checkpoint found")
 
-        abstract_tree_state = jax.tree.map(
-            ocp.utils.to_shape_dtype_struct, state
-        )
-        tree = self.checkpoint_manager.restore(
+         is_abstract = jax.tree.reduce(
+            lambda acc, current: acc and isinstance(current, jax.ShapeDtypeStruct), state, True
+         )
+         abstract_tree_state = state
+         if not is_abstract:
+            abstract_tree_state = jax.tree.map(
+               ocp.utils.to_shape_dtype_struct, state
+            )
+
+         tree = self.checkpoint_manager.restore(
             self.load,
             args=ocp.args.Composite(
                 state=ocp.args.StandardRestore(abstract_tree_state),
                 metadata=ocp.args.JsonRestore(),
             ),
-        )
+         )
 
-        tree_state, tree_metadata = tree.state, tree.metadata
-        return {
-           "state": tree_state,
-           "metadata": tree_metadata
-        }
+         tree_state, tree_metadata = tree.state, tree.metadata
+         return {
+            "state": tree_state,
+            "metadata": tree_metadata
+         }
