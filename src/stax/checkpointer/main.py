@@ -3,65 +3,115 @@ import orbax.checkpoint as ocp
 from loguru import logger
 from jaxtyping import PyTree
 
-#TODO:
-# 1. Find ways to get best metric restored
 
 class Checkpointer:
+    """
+    A helper class to manage saving and restoring checkpoints in JAX using Orbax.
 
-  def __init__(self, output_dir: str, max_to_keep : int=1):
+    This class handles checkpoint creation, restoration, and management for model state
+    and metadata, supporting saving to Google Cloud Storage (GCS) paths.
 
-      assert output_dir.startswith("gs"), f"expected gs path got {output_dir}"
+    Attributes:
+        checkpoint_dir (str): Directory path where checkpoints are stored.
+        options (ocp.CheckpointManagerOptions): Options controlling checkpoint retention.
+        checkpoint_manager (ocp.CheckpointManager): Orbax checkpoint manager instance.
+        load (int | None): Latest checkpoint step if found, otherwise None.
+    """
 
-      self.checkpoint_dir = output_dir
-      #TODO: find some way to add the best model
-      self.options = ocp.CheckpointManagerOptions(max_to_keep=max_to_keep)
-      self.checkpoint_manager = ocp.CheckpointManager(self.checkpoint_dir, options=self.options)
-      self.load = self.checkpoint_manager.latest_step()
+    def __init__(self, output_dir: str, max_to_keep: int = 1) -> None:
+        """
+        Initialize the Checkpointer.
 
-      if self.load is not None:
-         logger.info(f"Found checkpoint @ step {self.load}")
-      else:
-         logger.info(f"No checkpoint found")
+        Args:
+            output_dir (str): Google Cloud Storage path (must start with 'gs').
+            max_to_keep (int, optional): Maximum number of checkpoints to retain. Defaults to 1.
 
-  @property
-  def found_checkpoint(self):
-     return self.load
+        Raises:
+            AssertionError: If the provided output_dir is not a valid GCS path.
+        """
+        assert output_dir.startswith("gs"), f"expected gs path got {output_dir}"
 
-  def save_checkpoint(self, step : int , save_tree: PyTree, metadata: PyTree) -> None:
-     self.checkpoint_manager.save(
-        step,
-        args=ocp.args.Composite(
-           state=ocp.args.StandardSave(save_tree),
-           metadata=ocp.args.JsonRestore(metadata)
+        self.checkpoint_dir: str = output_dir
+        self.options: ocp.CheckpointManagerOptions = ocp.CheckpointManagerOptions(max_to_keep=max_to_keep)
+        self.checkpoint_manager: ocp.CheckpointManager = ocp.CheckpointManager(self.checkpoint_dir, options=self.options)
+        self.load: int | None = self.checkpoint_manager.latest_step()
+
+        if self.load is not None:
+            logger.info(f"Found checkpoint @ step {self.load}")
+        else:
+            logger.info(f"No checkpoint found")
+
+    @property
+    def found_checkpoint(self) -> int | None:
+        """
+        Returns the most recent checkpoint step if available.
+
+        Returns:
+            int | None: The latest checkpoint step, or None if no checkpoint exists.
+        """
+        return self.load
+
+    def save_checkpoint(self, step: int, save_tree: PyTree, metadata: PyTree) -> None:
+        """
+        Save a checkpoint containing model state and metadata.
+
+        Args:
+            step (int): Training step number.
+            save_tree (PyTree): Model state or other data to checkpoint.
+            metadata (PyTree): Metadata to be saved (e.g., metrics or config).
+        """
+        self.checkpoint_manager.save(
+            step,
+            args=ocp.args.Composite(
+                state=ocp.args.StandardSave(save_tree),
+                metadata=ocp.args.JsonRestore(metadata)
+            )
         )
-     )
 
-  def restore(self, state: PyTree) -> dict[str, PyTree]:
-         if self.load is None:
+    def restore(self, state: PyTree) -> dict[str, PyTree]:
+        """
+        Restore a checkpoint from the latest saved step.
+
+        Args:
+            state (PyTree): Model state structure to match the checkpoint data.
+                Can be concrete (real data) or abstract (jax.ShapeDtypeStructs).
+
+        Returns:
+            dict[str, PyTree]: A dictionary with keys:
+                - "state": Restored model state.
+                - "metadata": Restored metadata.
+
+        Raises:
+            ValueError: If no latest checkpoint is found.
+        """
+        if self.load is None:
             raise ValueError("No latest checkpoint found")
 
-         is_abstract = jax.tree.reduce(
+        is_abstract: bool = jax.tree.reduce(
             lambda acc, current: acc and isinstance(current, jax.ShapeDtypeStruct), state, True
-         )
-         abstract_tree_state = state
-         if not is_abstract:
+        )
+        abstract_tree_state: PyTree = state
+        if not is_abstract:
             abstract_tree_state = jax.tree.map(
-               ocp.utils.to_shape_dtype_struct, state
+                ocp.utils.to_shape_dtype_struct, state
             )
 
-         tree = self.checkpoint_manager.restore(
+        tree = self.checkpoint_manager.restore(
             self.load,
             args=ocp.args.Composite(
                 state=ocp.args.StandardRestore(abstract_tree_state),
                 metadata=ocp.args.JsonRestore(),
             ),
-         )
+        )
 
-         tree_state, tree_metadata = tree.state, tree.metadata
-         return {
+        tree_state, tree_metadata = tree.state, tree.metadata
+        return {
             "state": tree_state,
             "metadata": tree_metadata
-         }
+        }
 
-  def wait_until_finished(self):
-     self.checkpoint_manager.wait_until_finished()
+    def wait_until_finished(self) -> None:
+        """
+        Block execution until all pending checkpoint save operations have completed.
+        """
+        self.checkpoint_manager.wait_until_finished()
