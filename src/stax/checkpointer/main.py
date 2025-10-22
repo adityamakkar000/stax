@@ -21,7 +21,7 @@ class Checkpointer:
       if self.load:
          logger.info(f"Found checkpoint @ step {self.load}")
       else:
-         logger.ingo(f"No checkpoint found")
+         logger.info(f"No checkpoint found")
 
   @property
   def found_checkpoint(self):
