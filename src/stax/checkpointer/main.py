@@ -62,3 +62,6 @@ class Checkpointer:
             "state": tree_state,
             "metadata": tree_metadata
          }
+
+  def wait_until_finished(self):
+     self.checkpoint_manager.wait_until_finished()
