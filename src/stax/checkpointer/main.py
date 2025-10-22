@@ -16,9 +16,9 @@ class Checkpointer:
       #TODO: find some way to add the best model
       self.options = ocp.CheckpointManagerOptions(max_to_keep=max_to_keep)
       self.checkpoint_manager = ocp.CheckpointManager(self.checkpoint_dir, options=self.options)
-      self.load = self.checkpoint_manager.latest_step() is not None
+      self.load = self.checkpoint_manager.latest_step()
 
-      if self.load:
+      if self.load is not None:
          logger.info(f"Found checkpoint @ step {self.load}")
       else:
          logger.info(f"No checkpoint found")
