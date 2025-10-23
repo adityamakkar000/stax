@@ -29,7 +29,8 @@ class Checkpointer:
         Raises:
             AssertionError: If the provided output_dir is not a valid GCS path.
         """
-        assert output_dir.startswith("gs"), f"expected gs path got {output_dir}"
+        if not output_dir.startswith("gs"):
+            logger.info("NOT using gs path -- ensure you are not running multicontroller jax")
 
         self.checkpoint_dir: str = output_dir
         self.options: ocp.CheckpointManagerOptions = ocp.CheckpointManagerOptions(max_to_keep=max_to_keep)
