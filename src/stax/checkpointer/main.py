@@ -87,14 +87,14 @@ class Checkpointer:
         if self.load is None:
             raise ValueError("No latest checkpoint found")
 
-        is_abstract: bool = jax.tree.reduce(
-            lambda acc, current: acc and isinstance(current, jax.ShapeDtypeStruct), state, True
+        def to_abstract(x : any) -> jax.ShapeDtypeStruct:
+            if isinstance(x, jax.ShapeDtypeStruct):
+                return x
+            return ocp.utils.to_shape_dtype_struct(x)
+
+        abstract_tree_state: PyTree = jax.tree.map(
+            to_abstract, state
         )
-        abstract_tree_state: PyTree = state
-        if not is_abstract:
-            abstract_tree_state = jax.tree.map(
-                ocp.utils.to_shape_dtype_struct, state
-            )
 
         tree = self.checkpoint_manager.restore(
             self.load,
