@@ -78,7 +78,7 @@ class Checkpointer:
             ),
         )
 
-    def restore(self, *, abstract_state: PyTree) -> dict[str, PyTree]:
+    def restore(self, *, state: PyTree) -> dict[str, PyTree]:
         """
         Restore a checkpoint from the latest saved step.
 
@@ -98,7 +98,7 @@ class Checkpointer:
             raise ValueError("No latest checkpoint found")
 
         abstract_tree_state: PyTree = jax.tree.map(
-            to_abstract, abstract_state["model_state"]
+            to_abstract, state["model_state"]
         )
 
         tree = self.checkpoint_manager.restore(
