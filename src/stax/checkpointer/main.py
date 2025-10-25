@@ -74,7 +74,7 @@ class Checkpointer:
             step,
             args=ocp.args.Composite(
                 state=ocp.args.StandardSave(save_tree),
-                metadata=ocp.args.JsonRestore(metadata),
+                metadata=ocp.args.JsonSave(metadata),
             ),
         )
 
