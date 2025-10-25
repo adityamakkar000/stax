@@ -98,7 +98,7 @@ class Checkpointer:
             raise ValueError("No latest checkpoint found")
 
         abstract_tree_state: PyTree = jax.tree.map(
-            to_abstract, state["model_state"]
+            to_abstract, state
         )
 
         tree = self.checkpoint_manager.restore(
