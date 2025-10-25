@@ -47,9 +47,9 @@ class Checkpointer:
         self.checkpoint_manager: ocp.CheckpointManager = ocp.CheckpointManager(
             self.checkpoint_dir, options=self.options
         )
-        self.load: int | None = self.checkpoint_manager.latest_step()
+        
 
-        if self.load is not None:
+        if self.found_checkpoint is not None:
             logger.info(f"Found checkpoint @ step {self.load}")
         else:
             logger.info(f"No checkpoint found")
@@ -94,7 +94,7 @@ class Checkpointer:
         Raises:
             ValueError: If no latest checkpoint is found.
         """
-        if self.load is None:
+        if self.found_checkpoint is None:
             raise ValueError("No latest checkpoint found")
 
         abstract_tree_state: PyTree = jax.tree.map(
@@ -120,17 +120,9 @@ class Checkpointer:
 
     @property
     def found_checkpoint(self) -> int | None:
-        """
-        Returns the most recent checkpoint step if available.
-
-        Returns:
-            int | None: The latest checkpoint step, or None if no checkpoint exists.
-        """
-        return self.load
+        return isinstance(self.latest_step, int)
 
     @property
     def latest_step(self) -> int:
-        latest_step = self.checkpoint_manager.latest_step()
-        if latest_step is None:
-            raise ValueError("no latest step found")
-        return latest_step
+        return self.checkpoint_manager.latest_step()
+        
