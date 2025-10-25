@@ -102,7 +102,7 @@ class Checkpointer:
         )
 
         tree = self.checkpoint_manager.restore(
-            self.load,
+            self.latest_step,
             args=ocp.args.Composite(
                 state=ocp.args.StandardRestore(abstract_tree_state),
                 metadata=ocp.args.JsonRestore(),
