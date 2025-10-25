@@ -18,6 +18,13 @@ TrainFn = Callable[[Params, OptState, Batch], tuple[Params, OptState, float]]
 ValFn = Callable[[Params, Batch], float]
 
 
+def reshape_key_into_array(key: jax.random.PRNGKey , num_keys) -> Array: 
+    
+    keys = jnp.array(jax.random.split(key, num_keys))
+    if keys.ndim == 1: 
+        keys = keys.reshape(1, -1)
+    return keys
+
 def process_aux(out: PyTree, has_aux: bool = True) -> PyTree:
     if has_aux:
         _, metrics = out
