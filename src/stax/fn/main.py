@@ -1,12 +1,21 @@
 import jax
 from flax import linen as nn
 from jaxtyping import PyTree, Array
-from typing import Union, TypeVar
+from typing import Union, Callable, Tuple
 import jax.numpy as jnp
 import optax
 
-jax_key = TypeVar(Union[jax.random.key, jax.random.PRNGKey])
+#TODO: fix all type infromation
+
+jax_key = Union[jax.random.key, jax.random.PRNGKey]
 sharding = jax.sharding.NamedSharding
+Params = PyTree
+Batch = PyTree
+OptState = PyTree
+
+StepFn = Callable[[Params, Batch], float | tuple[float, PyTree]]
+TrainFn = Callable[[Params, OptState, Batch], tuple[Params, OptState, float]]
+ValFn = Callable[[Params, Batch], float]
 
 
 def process_aux(out: PyTree, has_aux: bool = True) -> PyTree:
@@ -17,14 +26,14 @@ def process_aux(out: PyTree, has_aux: bool = True) -> PyTree:
     return metrics
 
 
-def step(fn: callable, model: nn.Module):
-    def step_fn(*batch: PyTree) -> Array:
-        return fn(model, *batch)
+def get_single_step_fn(fn: StepFn, model: nn.Module):
+    def step_fn(params, *batch: Batch) -> float:
+        return fn(model, params, *batch)
 
     return step_fn
 
 
-def train_step(
+def train_step_jit(
     step_fn: callable,
     tx: optax,
     params: PyTree,
@@ -52,7 +61,7 @@ def train_step(
     return {"metrics": metrics, "opt_state": opt_state, "params": params}
 
 
-def val_step(
+def val_step_jit(
     step_fn: callable,
     params: PyTree,
     batch: PyTree,
@@ -76,22 +85,23 @@ def val_step(
     return metrics
 
 
-def get_step_fn(
+def get_steps_fn(
     step_fn: callable,
     model: nn.Module,
     tx: optax,
     grad_steps: int = 1,
+    eval_steps: int = 1,
     has_aux: bool = True,
     in_shardings: sharding | None = None,
     out_shardings: sharding | None = None,
 ) -> tuple[callable, callable]:
     # TODO: make use of shardings
 
-    single_step = step(step_fn, model)
+    single_step = get_single_step_fn(step_fn, model)
 
     @jax.jit
-    def train_fn(params, opt_state, batch):
-        return train_step(
+    def train_fn(params, opt_state, *batch):
+        return train_step_jit(
             single_step,
             tx,
             params,
@@ -102,7 +112,9 @@ def get_step_fn(
         )
 
     @jax.jit
-    def val_fn(params, batch):
-        return val_step(single_step, params, batch)
+    def val_fn(params, *batch):
+        return val_step_jit(single_step, params, batch, eval_steps=eval_steps, has_aux=has_aux)
 
     return train_fn, val_fn
+
+
