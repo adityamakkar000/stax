@@ -60,12 +60,18 @@ class Checkpointer:
         model_state: dict[PyTree],
         key: PyTree,
         dataset: dict[PyTree],
-        **metadata,
     ) -> PyTree:
-        save_tree = {"model_state": model_state, "key": key, "dataset": dataset}
-        return save_tree, metadata
+        return {"model_state": model_state, "key": key, "dataset": dataset}
 
-    def save_checkpoint(self, step: int, **ckpt_info) -> None:
+    def save_checkpoint(
+            self, 
+            step: int, 
+            *,
+            model_state: dict[PyTree],
+            key: PyTree,
+            dataset: dict[PyTree],
+            **metadata,
+) -> None:
         """
         Save a checkpoint containing model state and metadata.
 
@@ -74,7 +80,11 @@ class Checkpointer:
             save_tree (PyTree): Model state or other data to checkpoint.
             metadata (PyTree): Metadata to be saved (e.g., metrics or config).
         """
-        save_tree, metadata = self.make_save_tree(**ckpt_info)
+        save_tree = self.make_save_tree(
+            model_state, 
+            key, 
+            dataset, 
+        )
         self.checkpoint_manager.save(
             step,
             args=ocp.args.Composite(
@@ -102,7 +112,7 @@ class Checkpointer:
         if self.load is None:
             raise ValueError("No latest checkpoint found")
 
-        save_tree, _ = self.make_save_tree(**ckpt_info)
+        save_tree  = self.make_save_tree(**ckpt_info)
         abstract_tree_state: PyTree = jax.tree.map(
             to_abstract, save_tree["model_state"]
         )
