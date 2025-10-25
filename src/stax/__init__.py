@@ -1,9 +1,3 @@
+from stax.checkpointer import *
 
-
-from stax.checkpointer import Checkpointer
-
-__all__ = [
-  Checkpointer
-
-
-]
+__all__ = [Checkpointer]

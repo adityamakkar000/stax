@@ -4,6 +4,12 @@ from loguru import logger
 from jaxtyping import PyTree
 
 
+def to_abstract(x: any) -> jax.ShapeDtypeStruct:
+    if isinstance(x, jax.ShapeDtypeStruct):
+        return x
+    return ocp.utils.to_shape_dtype_struct(x)
+
+
 class Checkpointer:
     """
     A helper class to manage saving and restoring checkpoints in JAX using Orbax.
@@ -30,11 +36,17 @@ class Checkpointer:
             AssertionError: If the provided output_dir is not a valid GCS path.
         """
         if not output_dir.startswith("gs"):
-            logger.info("NOT using gs path -- ensure you are not running multicontroller jax")
+            logger.info(
+                "NOT using gs path -- ensure you are not running multicontroller jax"
+            )
 
         self.checkpoint_dir: str = output_dir
-        self.options: ocp.CheckpointManagerOptions = ocp.CheckpointManagerOptions(max_to_keep=max_to_keep)
-        self.checkpoint_manager: ocp.CheckpointManager = ocp.CheckpointManager(self.checkpoint_dir, options=self.options)
+        self.options: ocp.CheckpointManagerOptions = ocp.CheckpointManagerOptions(
+            max_to_keep=max_to_keep
+        )
+        self.checkpoint_manager: ocp.CheckpointManager = ocp.CheckpointManager(
+            self.checkpoint_dir, options=self.options
+        )
         self.load: int | None = self.checkpoint_manager.latest_step()
 
         if self.load is not None:
@@ -42,17 +54,18 @@ class Checkpointer:
         else:
             logger.info(f"No checkpoint found")
 
-    @property
-    def found_checkpoint(self) -> int | None:
-        """
-        Returns the most recent checkpoint step if available.
+    def make_save_tree(
+        self,
+        *,
+        model_state: dict[PyTree],
+        key: PyTree,
+        dataset: dict[PyTree],
+        **metadata,
+    ) -> PyTree:
+        save_tree = {"model_state": model_state, "key": key, "dataset": dataset}
+        return save_tree, metadata
 
-        Returns:
-            int | None: The latest checkpoint step, or None if no checkpoint exists.
-        """
-        return self.load
-
-    def save_checkpoint(self, step: int, save_tree: PyTree, metadata: PyTree) -> None:
+    def save_checkpoint(self, step: int, **ckpt_info) -> None:
         """
         Save a checkpoint containing model state and metadata.
 
@@ -61,15 +74,16 @@ class Checkpointer:
             save_tree (PyTree): Model state or other data to checkpoint.
             metadata (PyTree): Metadata to be saved (e.g., metrics or config).
         """
+        save_tree, metadata = self.make_save_tree(**ckpt_info)
         self.checkpoint_manager.save(
             step,
             args=ocp.args.Composite(
                 state=ocp.args.StandardSave(save_tree),
-                metadata=ocp.args.JsonRestore(metadata)
-            )
+                metadata=ocp.args.JsonRestore(metadata),
+            ),
         )
 
-    def restore(self, state: PyTree) -> dict[str, PyTree]:
+    def restore(self, **ckpt_info) -> dict[str, PyTree]:
         """
         Restore a checkpoint from the latest saved step.
 
@@ -88,13 +102,9 @@ class Checkpointer:
         if self.load is None:
             raise ValueError("No latest checkpoint found")
 
-        def to_abstract(x : any) -> jax.ShapeDtypeStruct:
-            if isinstance(x, jax.ShapeDtypeStruct):
-                return x
-            return ocp.utils.to_shape_dtype_struct(x)
-
+        save_tree, _ = self.make_save_tree(**ckpt_info)
         abstract_tree_state: PyTree = jax.tree.map(
-            to_abstract, state
+            to_abstract, save_tree["model_state"]
         )
 
         tree = self.checkpoint_manager.restore(
@@ -106,13 +116,27 @@ class Checkpointer:
         )
 
         tree_state, tree_metadata = tree.state, tree.metadata
-        return {
-            "state": tree_state,
-            "metadata": tree_metadata
-        }
+        return {"state": tree_state, "metadata": tree_metadata}
 
     def wait_until_finished(self) -> None:
         """
         Block execution until all pending checkpoint save operations have completed.
         """
         self.checkpoint_manager.wait_until_finished()
+
+    @property
+    def found_checkpoint(self) -> int | None:
+        """
+        Returns the most recent checkpoint step if available.
+
+        Returns:
+            int | None: The latest checkpoint step, or None if no checkpoint exists.
+        """
+        return self.load
+
+    @property
+    def latest_step(self) -> int:
+        latest_step = self.checkpoint_manager.latest_step()
+        if latest_step is None:
+            raise ValueError("no latest step found")
+        return latest_step
