@@ -50,7 +50,7 @@ class Checkpointer:
         
 
         if self.found_checkpoint is not None:
-            logger.info(f"Found checkpoint @ step {self.load}")
+            logger.info(f"Found checkpoint @ step {self.latest_step}")
         else:
             logger.info(f"No checkpoint found")
 
