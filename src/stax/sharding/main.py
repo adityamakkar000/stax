@@ -44,6 +44,7 @@ def get_dp_sharding(mesh : Mesh, params: PyTree, opt_state: PyTree, data_axis : 
     opt_state_sharding = replicate_sharding 
 
     def shard_data(*batch):
+        #TODO: make this different for multicontroller jax 
         batch = jax.tree.map(lambda x: jax.device_put(x, data_sharding))
         return batch if len(batch) > 1 else batch[0]
 
