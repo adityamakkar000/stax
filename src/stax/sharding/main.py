@@ -18,6 +18,13 @@ integrate with training loop to add Zero 1,2,3
 
 def setup_dp(devices : np.ndarray | None = None):
 
+    if not jax.distributed.is_initialized():
+        logger.warning("jax distributed has not been initalizated, initalizing now but add the call to your code to control process, adresses, etc.")
+        try: 
+            jax.distributed.initialize()
+        except Exception as e: 
+            logger.critical(f"could not initalize add to client side code error: {e}")
+
     if devices is None:
         devices = np.array(jax.devices())
 
