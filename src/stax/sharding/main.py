@@ -9,6 +9,8 @@ from jax.sharding import (
     Mesh
 )
 
+from typing import Union, Callable
+
 """
 TODO: 
 add multihost sharding 
@@ -39,7 +41,7 @@ def setup_dp(devices : np.ndarray | None = None):
     logger.info(f"setup DP mesh with {mesh}")
     return mesh
 
-def get_dp_sharding(mesh : Mesh, params: PyTree, opt_state: PyTree, data_axis : int = 0) -> dict[str, PyTree |callable]:
+def get_dp_sharding(mesh : Mesh, params: PyTree, opt_state: PyTree, data_axis : int = 0) -> dict[str, Union[PyTree, Callable]]:
 
     """inspired by https://github.com/kvfrans/jaxtransformer"""
     assert len(mesh.axis_names) == 1, f"dp mesh should only have one mesh"
