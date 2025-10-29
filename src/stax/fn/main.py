@@ -6,12 +6,15 @@ import jax.numpy as jnp
 import optax
 
 import numpy as np
-from stax.sharding import setup_dp, get_dp_sharding
+from stax.sharding import (
+    setup_dp, 
+    get_dp_sharding, 
+    SHARDING_TYPES
+)
 
 from jax.sharding import (
     NamedSharding, 
     PartitionSpec as P, 
-    Mesh
 )
 
 
@@ -130,6 +133,7 @@ def get_steps_fn(
         return val_step(single_step, params, batch, eval_steps=eval_steps, has_aux=has_aux)
 
     if sharding is not None: 
+        assert sharding in SHARDING_TYPES, f"got {sharding=} but expected it to be in {SHARDING_TYPES}"
         mesh = setup_dp(devices=devices) 
         shard_data, (param_sharding, opt_state_sharding) = get_dp_sharding(mesh, data_axis=data_shard_axis)
         replicate_sharding = NamedSharding(mesh, P()) 

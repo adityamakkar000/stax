@@ -18,6 +18,8 @@ FSDP sharding
 integrate with training loop to add Zero 1,2,3 
 """
 
+SHARDING_TYPES = ['dp']
+
 def setup_dp(devices : np.ndarray | None = None):
 
     if not jax.distributed.is_initialized():
