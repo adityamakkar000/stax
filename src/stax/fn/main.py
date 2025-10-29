@@ -156,7 +156,7 @@ def get_steps_fn(
     else: 
         train_fn = jax.jit(train_fn_jit)
         val_fn = jax.jit(val_fn_jit)
-        param_sharding , opt_state_sharding = jax.sharding.SingleDeviceSharding(jax.devices()[0])
+        param_sharding , opt_state_sharding = (jax.sharding.SingleDeviceSharding(jax.devices()[0]), ) * 2
 
     return train_fn, val_fn, (param_sharding, opt_state_sharding)
 

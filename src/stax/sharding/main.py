@@ -55,6 +55,7 @@ def get_dp_sharding(mesh : Mesh, data_axis : int = 0) -> dict[str, Union[PyTree,
         # special function to handle keys in batch
         def put_batch_fn(x):
             is_key = lambda x:  (x.ndim == 2 and x.shape[1] == 2)
+            #TODO: figure out how to split this based on dim
             if is_key(x): 
                 return jax.device_put(x, replicate_sharding)
             return jax.device_put(x, data_sharding)
