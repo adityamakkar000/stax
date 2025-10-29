@@ -4,7 +4,6 @@ from jaxtyping import PyTree, Array
 from typing import Union, Callable, Tuple
 import jax.numpy as jnp
 import optax
-
 #TODO: fix all type infromation
 
 jax_key = Union[jax.random.key, jax.random.PRNGKey]
@@ -99,14 +98,13 @@ def get_steps_fn(
     grad_steps: int = 1,
     eval_steps: int = 1,
     has_aux: bool = True,
-    in_shardings: sharding | None = None,
-    out_shardings: sharding | None = None,
+    in_shardings: dict[str, sharding] | None = None,
+    out_shardings: dict[str, sharding] | None = None,
 ) -> tuple[callable, callable]:
     # TODO: make use of shardings
 
     single_step = get_single_step_fn(step_fn, model)
 
-    @jax.jit
     def train_fn(params, opt_state, *batch):
         return train_step_jit(
             single_step,
@@ -118,9 +116,21 @@ def get_steps_fn(
             has_aux=has_aux,
         )
 
-    @jax.jit
     def val_fn(params, *batch):
         return val_step_jit(single_step, params, batch, eval_steps=eval_steps, has_aux=has_aux)
+
+    if out_shardings is not None: 
+        train_fn = jax.jit(
+            train_fn, 
+            out_shardings=out_shardings
+        )
+        val_fn = jax.jit(
+            val_fn, 
+            out_shardings=out_shardings
+        )
+    else: 
+        train_fn = jax.jit(train_fn)
+        val_fn = jax.jit(val_fn)
 
     return train_fn, val_fn
 
