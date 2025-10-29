@@ -44,7 +44,7 @@ def get_dp_sharding(mesh : Mesh, data_axis : int = 0) -> dict[str, Union[PyTree,
 
     replicate_sharding = NamedSharding(mesh, P())
 
-    data_tuple = [None for _ in range(data_axis - 1)] + [mesh.axis_names[0]]
+    data_tuple = [None for _ in range(data_axis)] + [mesh.axis_names[0]]
     data_sharding = NamedSharding(mesh, P(*(data_tuple))) 
 
     param_sharding = replicate_sharding
