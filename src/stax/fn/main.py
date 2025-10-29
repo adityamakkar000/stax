@@ -143,7 +143,7 @@ def get_steps_fn(
             out_shardings={
                 "metrics":replicate_sharding,  
                 "params": param_sharding, 
-                "opt_state_sharding": opt_state_sharding
+                "opt_state": opt_state_sharding
             }
         )(params, opt_state, *shard_data(batch))
 
