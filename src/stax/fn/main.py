@@ -134,7 +134,7 @@ def get_steps_fn(
         shard_data, (param_sharding, opt_state_sharding) = get_dp_sharding(mesh, data_axis=data_shard_axis)
         replicate_sharding = NamedSharding(mesh, P()) 
 
-        train = lambda params, opt_state, *batch: jax.jit(
+        train_fn = lambda params, opt_state, *batch: jax.jit(
             train_fn, 
             out_shardings={
                 "metrics":replicate_sharding,  
@@ -143,15 +143,15 @@ def get_steps_fn(
             }
         )(params, opt_state, *shard_data(batch))
 
-        val = lambda params, *batch: jax.jit(
+        val_fn = lambda params, *batch: jax.jit(
             val_fn, 
             out_shardings=replicate_sharding
         )(params, *shard_data(batch))
 
     else: 
-        train = jax.jit(train_fn)
-        val = jax.jit(val_fn)
+        train_fn = jax.jit(train_fn)
+        val_fn = jax.jit(val_fn)
 
-    return train, val
+    return train_fn, val_fn
 
 
