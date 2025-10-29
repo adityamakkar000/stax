@@ -18,8 +18,6 @@ FSDP sharding
 integrate with training loop to add Zero 1,2,3 
 """
 
-SHARDING_TYPES = ['dp']
-
 def setup_dp(devices : np.ndarray | None = None):
 
     if not jax.distributed.is_initialized():
@@ -56,6 +54,10 @@ def get_dp_sharding(mesh : Mesh, data_axis : int = 0) -> dict[str, Union[PyTree,
         return jax.tree.map(lambda x: jax.device_put(x, data_sharding))
 
     return shard_data, (param_sharding, opt_state_sharding)
+
+SHARDING_TYPES = {
+    'dp': get_dp_sharding
+}
 
 if __name__ == '__main__':
     mesh = setup_dp()

@@ -133,9 +133,9 @@ def get_steps_fn(
         return val_step(single_step, params, batch, eval_steps=eval_steps, has_aux=has_aux)
 
     if sharding is not None: 
-        assert sharding in SHARDING_TYPES, f"got {sharding=} but expected it to be in {SHARDING_TYPES}"
+        assert sharding in list(SHARDING_TYPES.keys()), f"got {sharding=} but expected it to be in {list(SHARDING_TYPES.keys())}"
         mesh = setup_dp(devices=devices) 
-        shard_data, (param_sharding, opt_state_sharding) = get_dp_sharding(mesh, data_axis=data_shard_axis)
+        shard_data, (param_sharding, opt_state_sharding) = SHARDING_TYPES[sharding](mesh, data_axis=data_shard_axis)
         replicate_sharding = NamedSharding(mesh, P()) 
 
         train_fn = lambda params, opt_state, *batch: jax.jit(
