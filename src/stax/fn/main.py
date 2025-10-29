@@ -127,7 +127,7 @@ def get_steps_fn(
         )
 
     def val_fn_jit(params, *batch):
-        return val_step(single_step, params, batch, eval_steps=1, has_aux=has_aux)
+        return val_step(single_step, params, batch, eval_steps=eval_steps, has_aux=has_aux)
 
     if sharding is not None: 
         mesh = setup_dp(devices=devices) 
@@ -150,7 +150,7 @@ def get_steps_fn(
 
     else: 
         train_fn = jax.jit(train_fn_jit)
-        val_fn = jax.jit(val_fn)
+        val_fn = jax.jit(val_fn_jit)
 
     return train_fn, val_fn
 
