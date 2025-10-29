@@ -47,18 +47,17 @@ def get_dp_sharding(mesh : Mesh, data_axis : int = 0) -> dict[str, Union[PyTree,
 
     replicate_sharding = NamedSharding(mesh, P())
 
-    data_tuple = (None for _ in range(data_axis - 1)) + (mesh.axis_names[0])
+    data_tuple = (None for _ in range(data_axis - 1)) + (mesh.axis_names[0], )
     data_sharding = NamedSharding(mesh, P(*(data_tuple))) 
 
     param_sharding = replicate_sharding
     opt_state_sharding = replicate_sharding 
 
-    def shard_data(*batch):
+    def shard_data(batch):
         #TODO: make this different for multicontroller jax 
-        batch = jax.tree.map(lambda x: jax.device_put(x, data_sharding))
-        return batch if len(batch) > 1 else batch[0]
+        return jax.tree.map(lambda x: jax.device_put(x, data_sharding))
 
-    return {"param_sharding": param_sharding, "opt_state_sharding": opt_state_sharding, "shard_data": shard_data}
+    return shard_data, (param_sharding, opt_state_sharding)
 
 if __name__ == '__main__':
     mesh = setup_dp()

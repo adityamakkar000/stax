@@ -4,6 +4,17 @@ from jaxtyping import PyTree, Array
 from typing import Union, Callable, Tuple
 import jax.numpy as jnp
 import optax
+
+import numpy as np
+from stax.sharding import setup_dp, get_dp_sharding
+
+from jax.sharding import (
+    NamedSharding, 
+    PartitionSpec as P, 
+    Mesh
+)
+
+
 #TODO: fix all type infromation
 
 jax_key = Union[jax.random.key, jax.random.PRNGKey]
@@ -64,7 +75,7 @@ def train_step_jit(
     updates, opt_state = tx.update(grads, opt_state, params)
     params = optax.apply_updates(params, updates)
 
-    return {"metrics": metrics, "opt_state": opt_state, "params": params}
+    return {"metrics": metrics, "params": params, "opt_state", opt_state}
 
 
 def val_step_jit(
@@ -98,8 +109,9 @@ def get_steps_fn(
     grad_steps: int = 1,
     eval_steps: int = 1,
     has_aux: bool = True,
-    in_shardings: dict[str, sharding] | None = None,
-    out_shardings: dict[str, sharding] | None = None,
+    sharding : str  | None = None,
+    devices : np.ndarray | None = None, 
+    data_shard_axis: int = 0
 ) -> tuple[callable, callable]:
     # TODO: make use of shardings
 
@@ -119,15 +131,25 @@ def get_steps_fn(
     def val_fn(params, *batch):
         return val_step_jit(single_step, params, batch, eval_steps=eval_steps, has_aux=has_aux)
 
-    if out_shardings is not None: 
-        train_fn = jax.jit(
+    if sharding is not None: 
+        mesh = setup_dp(devices=devices) 
+        shard_data, (param_sharding, opt_state_sharding) = get_dp_sharding(mesh, data_axis=data_shard_axis)
+        replicate_sharding = NamedSharding(mesh, P()) 
+
+        train_fn = lambda params, opt_state, *batch: jax.jit(
             train_fn, 
-            out_shardings=out_shardings
-        )
-        val_fn = jax.jit(
+            out_shardings={
+                "metrics":replicate_sharding,  
+                "params": param_sharding, 
+                "opt_state_sharding": opt_state_sharding
+            }
+        )(params, opt_state, *shard_data(batch))
+
+        val_fn = lambda params, *batch: jax.jit(
             val_fn, 
-            out_shardings=out_shardings
-        )
+            out_shardings=replicate_sharding
+        )(params, *shard_data(batch))
+
     else: 
         train_fn = jax.jit(train_fn)
         val_fn = jax.jit(val_fn)
