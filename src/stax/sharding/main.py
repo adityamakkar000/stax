@@ -51,7 +51,8 @@ def get_dp_sharding(mesh : Mesh, data_axis : int = 0) -> dict[str, Union[PyTree,
 
     def shard_data(batch):
         #TODO: make this different for multicontroller jax 
-        return jax.tree.map(lambda x: jax.device_put(x, data_sharding))
+        batch = jax.tree.map(lambda x: jax.device_put(x, data_sharding), batch)
+        return batch
 
     return shard_data, (param_sharding, opt_state_sharding)
 
