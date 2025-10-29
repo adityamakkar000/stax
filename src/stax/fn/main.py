@@ -113,7 +113,7 @@ def get_steps_fn(
     sharding : str  | None = None,
     devices : np.ndarray | None = None, 
     data_shard_axis: int = 0
-) -> tuple[callable, callable]:
+) -> tuple[callable, callable, dict]:
     # TODO: make use of shardings
 
     single_step = get_single_step_fn(step_fn, model)
@@ -152,10 +152,12 @@ def get_steps_fn(
             out_shardings=replicate_sharding
         )(params, *shard_data(batch))
 
+
     else: 
         train_fn = jax.jit(train_fn_jit)
         val_fn = jax.jit(val_fn_jit)
+        param_sharding , opt_state_sharding = jax.sharding.SingleDeviceSharding(jax.devices()[0])
 
-    return train_fn, val_fn
+    return train_fn, val_fn, (param_sharding, opt_state_sharding)
 
 
