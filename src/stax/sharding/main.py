@@ -30,8 +30,7 @@ def setup_dp(devices : np.ndarray | None = None):
     if devices is None:
         devices = np.array(jax.devices())
 
-    # sometimes jax cannot create optimal mesh layout
-    # in that case manually make it
+    # if jax cannot create optimal mesh layout, make a manual mesh
     try:
         mesh = jax.make_mesh((len(devices), ) ('dp',), devices=devices)
     except:
@@ -41,13 +40,15 @@ def setup_dp(devices : np.ndarray | None = None):
     logger.info(f"setup DP mesh with {mesh}")
     return mesh
 
-def get_dp_sharding(mesh : Mesh, params: PyTree, opt_state: PyTree, data_axis : int = 0) -> dict[str, Union[PyTree, Callable]]:
+def get_dp_sharding(mesh : Mesh, data_axis : int = 0) -> dict[str, Union[PyTree, Callable]]:
 
     """inspired by https://github.com/kvfrans/jaxtransformer"""
     assert len(mesh.axis_names) == 1, f"dp mesh should only have one mesh"
 
     replicate_sharding = NamedSharding(mesh, P())
-    data_sharding = NamedSharding(mesh, P(*(None for _ in range(data_axis - 1)), mesh.axis_names[0])) 
+
+    data_tuple = (None for _ in range(data_axis - 1)) + (mesh.axis_names[0])
+    data_sharding = NamedSharding(mesh, P(*(data_tuple))) 
 
     param_sharding = replicate_sharding
     opt_state_sharding = replicate_sharding 
