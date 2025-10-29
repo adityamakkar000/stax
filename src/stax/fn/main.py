@@ -84,8 +84,7 @@ def val_step_jit(
     eval_steps: int = 1,
     has_aux: bool = True,
 ) -> PyTree:
-    # carry is just a placeholder for scan
-    # it has no use
+    # carry is a placeholder for scan
     def val_fn(_carry: None, batch: PyTree) -> tuple[None, PyTree]:
         out = step_fn(params, *batch)
         metrics = process_aux(out, has_aux=has_aux)
@@ -135,7 +134,7 @@ def get_steps_fn(
         shard_data, (param_sharding, opt_state_sharding) = get_dp_sharding(mesh, data_axis=data_shard_axis)
         replicate_sharding = NamedSharding(mesh, P()) 
 
-        train_fn = lambda params, opt_state, *batch: jax.jit(
+        train = lambda params, opt_state, *batch: jax.jit(
             train_fn, 
             out_shardings={
                 "metrics":replicate_sharding,  
@@ -144,15 +143,15 @@ def get_steps_fn(
             }
         )(params, opt_state, *shard_data(batch))
 
-        val_fn = lambda params, *batch: jax.jit(
+        val = lambda params, *batch: jax.jit(
             val_fn, 
             out_shardings=replicate_sharding
         )(params, *shard_data(batch))
 
     else: 
-        train_fn = jax.jit(train_fn)
-        val_fn = jax.jit(val_fn)
+        train = jax.jit(train_fn)
+        val = jax.jit(val_fn)
 
-    return train_fn, val_fn
+    return train, val
 
 
