@@ -28,7 +28,7 @@ def setup_dp(devices : np.ndarray | None = None):
 
     # if jax cannot create optimal mesh layout, make a manual mesh
     try:
-        mesh = jax.make_mesh((len(devices), ) ('dp',), devices=devices)
+        mesh = jax.make_mesh((len(devices), ), ('dp',), devices=devices)
     except:
         logger.warning("Failed to create mesh with make_mesh, falling back to sharding.Mesh")
         mesh = Mesh(devices, ('dp',))
