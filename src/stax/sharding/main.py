@@ -53,7 +53,7 @@ def get_dp_sharding(mesh : Mesh, data_axis : int = 0) -> dict[str, Union[PyTree,
     def shard_data(batch):
         # special function to handle keys in batch
         def put_batch_fn(x):
-            is_key = lambda x:  x.ndim == 2 and x.shape[0] == 1 and x.shape[1] == 2:
+            is_key = lambda x:  (x.ndim == 2 and x.shape[0] == 1 and x.shape[1] == 2)
             if is_key(x): 
                 x = jax.array(jax.random.split(x, jax.device_count()))
             return jax.device_put(x, data_sharding)
