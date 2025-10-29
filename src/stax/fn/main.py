@@ -105,6 +105,8 @@ def get_steps_fn(
     model: nn.Module,
     tx: optax,
     has_aux: bool = True,
+    grad_steps: int = 1, 
+    eval_steps: int = 1, 
     sharding : str  | None = None,
     devices : np.ndarray | None = None, 
     data_shard_axis: int = 0
@@ -120,11 +122,12 @@ def get_steps_fn(
             params,
             opt_state,
             batch,
+            grad_steps=grad_steps,
             has_aux=has_aux,
         )
 
     def val_fn_jit(params, *batch):
-        return val_step(single_step, params, batch, has_aux=has_aux)
+        return val_step(single_step, params, batch, eval_steps=1, has_aux=has_aux)
 
     if sharding is not None: 
         mesh = setup_dp(devices=devices) 
