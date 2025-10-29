@@ -74,7 +74,6 @@ def train_step_jit(
     metrics = jax.tree.map(lambda x: x.mean(axis=0), metrics)
     updates, opt_state = tx.update(grads, opt_state, params)
     params = optax.apply_updates(params, updates)
-
     return {"metrics": metrics, "params": params, "opt_state": opt_state}
 
 
