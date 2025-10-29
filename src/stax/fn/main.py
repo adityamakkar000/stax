@@ -50,7 +50,7 @@ def get_single_step_fn(fn: StepFn, model: nn.Module):
     return step_fn
 
 
-def train_step_jit(
+def train_step(
     step_fn: callable,
     tx: optax,
     params: PyTree,
@@ -77,7 +77,7 @@ def train_step_jit(
     return {"metrics": metrics, "params": params, "opt_state": opt_state}
 
 
-def val_step_jit(
+def val_step(
     step_fn: callable,
     params: PyTree,
     batch: PyTree,
@@ -104,8 +104,6 @@ def get_steps_fn(
     step_fn: callable,
     model: nn.Module,
     tx: optax,
-    grad_steps: int = 1,
-    eval_steps: int = 1,
     has_aux: bool = True,
     sharding : str  | None = None,
     devices : np.ndarray | None = None, 
@@ -115,19 +113,18 @@ def get_steps_fn(
 
     single_step = get_single_step_fn(step_fn, model)
 
-    def train_fn(params, opt_state, *batch):
-        return train_step_jit(
+    def train_fn_jit(params, opt_state, *batch):
+        return train_step(
             single_step,
             tx,
             params,
             opt_state,
             batch,
-            grad_steps=grad_steps,
             has_aux=has_aux,
         )
 
-    def val_fn(params, *batch):
-        return val_step_jit(single_step, params, batch, eval_steps=eval_steps, has_aux=has_aux)
+    def val_fn_jit(params, *batch):
+        return val_step(single_step, params, batch, has_aux=has_aux)
 
     if sharding is not None: 
         mesh = setup_dp(devices=devices) 
@@ -135,7 +132,7 @@ def get_steps_fn(
         replicate_sharding = NamedSharding(mesh, P()) 
 
         train_fn = lambda params, opt_state, *batch: jax.jit(
-            train_fn, 
+            train_fn_jit, 
             out_shardings={
                 "metrics":replicate_sharding,  
                 "params": param_sharding, 
@@ -144,12 +141,12 @@ def get_steps_fn(
         )(params, opt_state, *shard_data(batch))
 
         val_fn = lambda params, *batch: jax.jit(
-            val_fn, 
+            val_fn_jit, 
             out_shardings=replicate_sharding
         )(params, *shard_data(batch))
 
     else: 
-        train_fn = jax.jit(train_fn)
+        train_fn = jax.jit(train_fn_jit)
         val_fn = jax.jit(val_fn)
 
     return train_fn, val_fn
