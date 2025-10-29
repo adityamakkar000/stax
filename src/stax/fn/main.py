@@ -75,7 +75,7 @@ def train_step_jit(
     updates, opt_state = tx.update(grads, opt_state, params)
     params = optax.apply_updates(params, updates)
 
-    return {"metrics": metrics, "params": params, "opt_state", opt_state}
+    return {"metrics": metrics, "params": params, "opt_state": opt_state}
 
 
 def val_step_jit(
