@@ -13,6 +13,7 @@ dependencies = [
     "jaxtyping>=0.3.3",
     "loguru>=0.7.3",
     "orbax>=0.1.9",
+    "wandb>=0.22.3",
 ]
 
 [build-system]

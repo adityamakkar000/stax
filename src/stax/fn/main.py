@@ -6,19 +6,15 @@ import jax.numpy as jnp
 import optax
 
 import numpy as np
-from stax.sharding import (
-    setup_dp, 
-    get_dp_sharding, 
-    SHARDING_TYPES
-)
+from stax.sharding import setup_dp, get_dp_sharding, SHARDING_TYPES
 
 from jax.sharding import (
-    NamedSharding, 
-    PartitionSpec as P, 
+    NamedSharding,
+    PartitionSpec as P,
 )
 
 
-#TODO: fix all type infromation
+# TODO: fix all type infromation
 
 jax_key = Union[jax.random.key, jax.random.PRNGKey]
 sharding = jax.sharding.NamedSharding
@@ -31,12 +27,12 @@ TrainFn = Callable[[Params, OptState, Batch], tuple[Params, OptState, float]]
 ValFn = Callable[[Params, Batch], float]
 
 
-def reshape_key_into_array(key: jax.random.PRNGKey , num_keys) -> Array: 
-    
+def reshape_key_into_array(key: jax.random.PRNGKey, num_keys) -> Array:
     keys = jnp.array(jax.random.split(key, num_keys))
-    if keys.ndim == 1: 
+    if keys.ndim == 1:
         keys = keys.reshape(1, -1)
     return keys
+
 
 def process_aux(out: PyTree, has_aux: bool = True) -> PyTree:
     if has_aux:
@@ -108,11 +104,11 @@ def get_steps_fn(
     model: nn.Module,
     tx: optax,
     has_aux: bool = True,
-    grad_steps: int = 1, 
-    eval_steps: int = 1, 
-    sharding : str  | None = None,
-    devices : np.ndarray | None = None, 
-    data_shard_axis: int = 0
+    grad_steps: int = 1,
+    eval_steps: int = 1,
+    sharding: str | None = None,
+    devices: np.ndarray | None = None,
+    data_shard_axis: int = 0,
 ) -> tuple[callable, callable, dict]:
     # TODO: make use of shardings
 
@@ -130,34 +126,38 @@ def get_steps_fn(
         )
 
     def val_fn_jit(params, *batch):
-        return val_step(single_step, params, batch, eval_steps=eval_steps, has_aux=has_aux)
+        return val_step(
+            single_step, params, batch, eval_steps=eval_steps, has_aux=has_aux
+        )
 
-    if sharding is not None: 
-        assert sharding in list(SHARDING_TYPES.keys()), f"got {sharding=} but expected it to be in {list(SHARDING_TYPES.keys())}"
-        mesh = setup_dp(devices=devices) 
-        shard_data, (param_sharding, opt_state_sharding) = SHARDING_TYPES[sharding](mesh, data_axis=data_shard_axis)
-        replicate_sharding = NamedSharding(mesh, P()) 
+    if sharding is not None:
+        assert sharding in list(SHARDING_TYPES.keys()), (
+            f"got {sharding=} but expected it to be in {list(SHARDING_TYPES.keys())}"
+        )
+        mesh = setup_dp(devices=devices)
+        shard_data, (param_sharding, opt_state_sharding) = SHARDING_TYPES[sharding](
+            mesh, data_axis=data_shard_axis
+        )
+        replicate_sharding = NamedSharding(mesh, P())
 
         train_fn = lambda params, opt_state, *batch: jax.jit(
-            train_fn_jit, 
+            train_fn_jit,
             out_shardings={
-                "metrics":replicate_sharding,  
-                "params": param_sharding, 
-                "opt_state": opt_state_sharding
-            }
+                "metrics": replicate_sharding,
+                "params": param_sharding,
+                "opt_state": opt_state_sharding,
+            },
         )(params, opt_state, *shard_data(batch))
 
         val_fn = lambda params, *batch: jax.jit(
-            val_fn_jit, 
-            out_shardings=replicate_sharding
+            val_fn_jit, out_shardings=replicate_sharding
         )(params, *shard_data(batch))
 
-
-    else: 
+    else:
         train_fn = jax.jit(train_fn_jit)
         val_fn = jax.jit(val_fn_jit)
-        param_sharding , opt_state_sharding = (jax.sharding.SingleDeviceSharding(jax.devices()[0]), ) * 2
+        param_sharding, opt_state_sharding = (
+            jax.sharding.SingleDeviceSharding(jax.devices()[0]),
+        ) * 2
 
     return train_fn, val_fn, (param_sharding, opt_state_sharding)
-
-

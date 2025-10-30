@@ -47,7 +47,6 @@ class Checkpointer:
         self.checkpoint_manager: ocp.CheckpointManager = ocp.CheckpointManager(
             self.checkpoint_dir, options=self.options
         )
-        
 
         if self.found_checkpoint:
             logger.info(f"Found checkpoint @ step {self.latest_step}")
@@ -55,12 +54,8 @@ class Checkpointer:
             logger.info(f"No checkpoint found")
 
     def save_checkpoint(
-            self, 
-            step: int, 
-            *,
-            save_tree: PyTree,
-            metadata: dict[str, any]
-        ) -> None:
+        self, step: int, *, save_tree: PyTree, metadata: dict[str, any]
+    ) -> None:
         """
         Save a checkpoint containing model state and metadata.
 
@@ -69,7 +64,7 @@ class Checkpointer:
             save_tree (PyTree): Model state or other data to checkpoint.
             metadata (PyTree): Metadata to be saved (e.g., metrics or config).
         """
-        
+
         self.checkpoint_manager.save(
             step,
             args=ocp.args.Composite(
@@ -97,9 +92,7 @@ class Checkpointer:
         if self.found_checkpoint is None:
             raise ValueError("No latest checkpoint found")
 
-        abstract_tree_state: PyTree = jax.tree.map(
-            to_abstract, state
-        )
+        abstract_tree_state: PyTree = jax.tree.map(to_abstract, state)
 
         tree = self.checkpoint_manager.restore(
             self.latest_step,
@@ -125,4 +118,3 @@ class Checkpointer:
     @property
     def latest_step(self) -> int:
         return self.checkpoint_manager.latest_step()
-        
