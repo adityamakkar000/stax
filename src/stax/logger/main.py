@@ -54,6 +54,10 @@ class NeptuneLogger(BaseLogger):
 
         if run_id is None: 
             self._run.log_configs(config)
+        
+        logger.info(
+            f"Initialized Neptune Logger with run id {self._run._custom_run_id}"
+        )
 
     def log(self, step : int, data : dict[str, Any]): 
 
