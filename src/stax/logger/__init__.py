@@ -1,1 +1,4 @@
-from stax.logger.main import WandBLogger
+from stax.logger.main import (
+    logger, 
+    NeuptuneLogger
+)

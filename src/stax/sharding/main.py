@@ -39,7 +39,7 @@ def setup_dp(devices: np.ndarray | None = None):
 def get_dp_sharding(
     mesh: Mesh, data_axis: int = 0
 ) -> dict[str, Union[PyTree, Callable]]:
-    """inspired by https://github.com/kvfrans/jaxtransformer"""
+    """adapted  by https://github.com/kvfrans/jaxtransformer"""
     assert len(mesh.axis_names) == 1, f"dp mesh should only have one mesh"
 
     replicate_sharding = NamedSharding(mesh, P())
