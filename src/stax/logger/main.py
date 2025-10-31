@@ -59,7 +59,7 @@ class NeptuneLogger(BaseLogger):
             f"Initialized Neptune Logger with run id {self._run._custom_run_id}"
         )
 
-    def log(self, step : int, data : dict[str, Any]): 
+    def async_log(self, step : int, data : dict[str, Any]): 
 
         def convert_to_float(x): 
             if isinstance(x, jnp.Array): 
