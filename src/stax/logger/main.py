@@ -29,7 +29,7 @@ class BaseLogger(abc.ABC):
     #TODO: find some way to log a string 
     # like maybe take a template function in? 
     # that way we can print strings as well    
-    def log(self): 
+    def flush(self): 
         for metric in self.metrics: 
             self.async_log(**metric)
 
