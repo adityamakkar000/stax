@@ -12,7 +12,7 @@ dependencies = [
     "jax>=0.6.2",
     "jaxtyping>=0.3.3",
     "loguru>=0.7.3",
-    "neptune-scale>=0.29.0",
+    "neptune>=1.14.0",
     "orbax>=0.1.9",
     "wandb>=0.22.3",
 ]

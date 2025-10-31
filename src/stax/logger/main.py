@@ -1,6 +1,6 @@
 import jax
 import jax.numpy as jnp
-import neptune_scale as neptune 
+import neptune 
 from typing import Any, Mapping, Optional
 import os 
 
@@ -46,15 +46,15 @@ class NeptuneLogger(BaseLogger):
         }
 
         if run_id is not None: 
-            init_args['custom_run_id'] = run_id
+            init_args['with_id'] = run_id
 
         self._run  = neptune.Run(
             **init_args
         )
 
         if run_id is None: 
-            self._run.log_configs(config)
-        
+            self._run['parameters'] = config
+
         logger.info(
             f"Initialized Neptune Logger with run id {self._run._custom_run_id}"
         )
@@ -69,14 +69,13 @@ class NeptuneLogger(BaseLogger):
         data = jax.tree.map(
             convert_to_float, data
         )
-        self._run.log_metrics(
-            data=data,
-            step=step
-        )
+
+        for key in data.keys():
+            self._run[key].append(data[key], step=step)
 
     def finish(self) -> None:
         self._run.stop()
 
     @property
     def id(self) -> Optional[str]: 
-        return self._run._custom_run_id
+        return self._run._sys_id
