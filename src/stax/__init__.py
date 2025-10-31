@@ -10,5 +10,6 @@ __all__ = [
     setup_dp,
     get_dp_sharding,
     SHARDING_TYPES,
-    WandBLogger,
+    logger, 
+    
 ]

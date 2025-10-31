@@ -7,7 +7,7 @@ import os
 from loguru import logger
 import abc
 
-class logger(abc.ABC):
+class BaseLogger(abc.ABC):
 
     def __init__(self, keys_to_print: list[str]):
         self.keys_to_print = keys_to_print
@@ -33,7 +33,7 @@ class logger(abc.ABC):
         for metric in self.metrics: 
             self.async_log(**metric)
        
-class NeuptuneLogger:
+class NeuptuneLogger(BaseLogger):
     def __init__(self, name: str, config: Optional[dict[str, any]] = None, run_id: Optional[str]  = None ):
         assert not (config is None and run_id is None), f"config or run id must be provided"
         project_name = os.environ.get("NEPTUNE_PROJECT")

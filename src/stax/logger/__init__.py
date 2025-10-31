@@ -1,4 +1,4 @@
 from stax.logger.main import (
-    logger, 
+    BaseLogger, 
     NeuptuneLogger
 )
