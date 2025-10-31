@@ -1,6 +1,6 @@
 import jax
 import jax.numpy as jnp
-import neptune
+import neptune_scale as neptune 
 from typing import Any, Mapping, Optional
 import os 
 
