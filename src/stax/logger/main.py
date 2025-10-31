@@ -34,14 +34,26 @@ class logger(abc.ABC):
             self.async_log(**metric)
        
 class NeuptuneLogger:
-    def __init__(self, name: str):
+    def __init__(self, name: str, config: Optional[dict[str, any]] = None, run_id: Optional[str]  = None ):
+        assert not (config is None and run_id is None), f"config or run id must be provided"
         project_name = os.environ.get("NEPTUNE_PROJECT")
         api_key = os.environ.get("NEPTUNE_API_KEY")
+
+        init_args = {
+            'project': project_name, 
+            'api_token': api_key,
+            'name': name,
+        }
+
+        if run_id is not None: 
+            init_args['custom_run_id'] = run_id
+
         self._run : neptune.Run = neptune.init_run(
-            project=project_name, 
-            api_token=api_key,
-            name=name
+            **init_args
         )
+
+        if run_id is None: 
+            self._run.log_configs(config)
 
     def log(self, step : int, data : dict[str, Any]): 
 
@@ -63,4 +75,4 @@ class NeuptuneLogger:
 
     @property
     def id(self) -> Optional[str]: 
-        return self._run._sys_id
+        return self._run._custom_run_id
