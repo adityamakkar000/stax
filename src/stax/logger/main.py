@@ -9,8 +9,7 @@ import abc
 
 class BaseLogger(abc.ABC):
 
-    def __init__(self, keys_to_print: list[str]):
-        self.keys_to_print = keys_to_print
+    def __init__(self):
         self.metrics = []
 
     @abc.abstractmethod
@@ -35,6 +34,7 @@ class BaseLogger(abc.ABC):
 
 class NeptuneLogger(BaseLogger):
     def __init__(self, name: str, config: Optional[dict[str, any]] = None, run_id: Optional[str]  = None ):
+        super().__init__()
         assert not (config is None and run_id is None), f"config or run id must be provided"
         project_name = os.environ.get("NEPTUNE_PROJECT")
         api_key = os.environ.get("NEPTUNE_API_KEY")
@@ -56,13 +56,13 @@ class NeptuneLogger(BaseLogger):
             self._run['parameters'] = config
 
         logger.info(
-            f"Initialized Neptune Logger with run id {self._run._custom_run_id}"
+            f"Initialized Neptune Logger with run id {self.id}"
         )
 
     def async_log(self, step : int, data : dict[str, Any]): 
 
         def convert_to_float(x): 
-            if isinstance(x, jnp.Array): 
+            if isinstance(x, jnp.array): 
                 return x.item() 
             return x
 
