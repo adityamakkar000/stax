@@ -2,6 +2,7 @@ import jax
 import jax.numpy as jnp
 import neptune 
 from typing import Any, Mapping, Optional
+from jaxtyping import Array 
 import os 
 
 from loguru import logger
@@ -62,7 +63,7 @@ class NeptuneLogger(BaseLogger):
     def async_log(self, step : int, data : dict[str, Any]): 
 
         def convert_to_float(x): 
-            if isinstance(x, jnp.array): 
+            if isinstance(x, Array): 
                 return x.item() 
             return x
 
