@@ -48,7 +48,7 @@ class NeptuneLogger(BaseLogger):
         if run_id is not None: 
             init_args['custom_run_id'] = run_id
 
-        self._run : neptune.Run = neptune.init_run(
+        self._run  = neptune.Run(
             **init_args
         )
 
