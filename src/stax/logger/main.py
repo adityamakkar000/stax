@@ -32,8 +32,8 @@ class BaseLogger(abc.ABC):
     def log(self): 
         for metric in self.metrics: 
             self.async_log(**metric)
-       
-class NeuptuneLogger(BaseLogger):
+
+class NeptuneLogger(BaseLogger):
     def __init__(self, name: str, config: Optional[dict[str, any]] = None, run_id: Optional[str]  = None ):
         assert not (config is None and run_id is None), f"config or run id must be provided"
         project_name = os.environ.get("NEPTUNE_PROJECT")

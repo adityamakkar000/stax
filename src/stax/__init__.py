@@ -2,6 +2,7 @@ from stax.checkpointer import *
 from stax.fn import *
 from stax.sharding import *
 from stax.logger import *
+from stax.utils import *
 
 __all__ = [
     Checkpointer,
@@ -10,6 +11,7 @@ __all__ = [
     setup_dp,
     get_dp_sharding,
     SHARDING_TYPES,
-    logger, 
-    
+    BaseLogger, 
+    NeptuneLogger,
+    Timer
 ]
