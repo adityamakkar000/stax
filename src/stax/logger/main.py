@@ -34,10 +34,11 @@ class BaseLogger(abc.ABC):
 
 
 class WandBLogger(BaseLogger):
-    def __init__(self, project: str, config: Optional[Mapping[str, Any]] = None, run_id: Optional[str] = None):
+    def __init__(self, entity: str, project: str, config: Optional[Mapping[str, Any]] = None, run_id: Optional[str] = None):
         super().__init__()
         assert (config is not None) or (run_id is not None), "Either config or run_id must be provided"
         init_args = {
+            'entity': entity,
             'project': project,
             'resume': "allow"
         }
