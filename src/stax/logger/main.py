@@ -34,8 +34,9 @@ class BaseLogger(abc.ABC):
 
 
 class WandBLogger(BaseLogger):
-    def __init__(self, project: str, config: Optional[Mapping[str, Any]], run_id: Optional[str] = None):
+    def __init__(self, project: str, config: Optional[Mapping[str, Any]] = None, run_id: Optional[str] = None):
         super().__init__()
+        assert (config is not None) or (run_id is not None), "Either config or run_id must be provided"
         init_args = {
             'project': project,
             'resume': "allow"
@@ -43,10 +44,11 @@ class WandBLogger(BaseLogger):
         if run_id is not None: 
             init_args['id'] = run_id
             init_args['resume'] = "must"
+        else: 
+            init_args["config"] = config
 
         self._run = wandb.init(
             **init_args,
-            config=config
         )
 
         wandb.config.update(config)
