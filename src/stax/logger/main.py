@@ -1,6 +1,5 @@
 import jax
-import jax.numpy as jnp
-import neptune 
+import wandb
 from typing import Any, Mapping, Optional
 from jaxtyping import Array 
 import os 
@@ -33,50 +32,43 @@ class BaseLogger(abc.ABC):
         for metric in self.metrics: 
             self.async_log(**metric)
 
-class NeptuneLogger(BaseLogger):
-    def __init__(self, name: str, config: Optional[dict[str, any]] = None, run_id: Optional[str]  = None ):
+
+class WandBLogger(BaseLogger):
+    def __init__(self, project: str, config: Optional[Mapping[str, Any]], run_id: Optional[str] = None):
         super().__init__()
-        assert not (config is None and run_id is None), f"config or run id must be provided"
-        project_name = os.environ.get("NEPTUNE_PROJECT")
-        api_key = os.environ.get("NEPTUNE_API_KEY")
-
         init_args = {
-            'project': project_name, 
-            'api_token': api_key,
-            'name': name,
+            'project': project,
+            'resume': "allow"
         }
-
         if run_id is not None: 
-            init_args['with_id'] = run_id
+            init_args['id'] = run_id
+            init_args['resume'] = "must"
 
-        self._run  = neptune.Run(
-            **init_args
+        self._run = wandb.init(
+            **init_args,
+            config=config
         )
 
-        if run_id is None: 
-            self._run['parameters'] = config
-
+        wandb.config.update(config)
         logger.info(
-            f"Initialized Neptune Logger with run id {self.id}"
+            f"Initialized WandB Logger with run id {self.id}"
         )
 
-    def async_log(self, step : int, data : dict[str, Any]): 
-
-        def convert_to_float(x): 
-            if isinstance(x, Array): 
-                return x.item() 
-            return x
+    def async_log(self, step: int, data: dict[str, Any]):
 
         data = jax.tree.map(
-            convert_to_float, data
+            lambda x: x.item() if isinstance(x, Array) else x, 
+            data
+        )
+        wandb.log(
+            data,
+            step=step
         )
 
-        for key in data.keys():
-            self._run[key].append(data[key], step=step)
-
     def finish(self) -> None:
-        self._run.stop()
+        wandb.finish()
 
     @property
     def id(self) -> Optional[str]: 
-        return self._run._sys_id
+        return wandb.run.id
+
