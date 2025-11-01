@@ -52,7 +52,6 @@ class WandBLogger(BaseLogger):
             **init_args,
         )
 
-        wandb.config.update(config)
         logger.info(
             f"Initialized WandB Logger with run id {self.id}"
         )
@@ -63,15 +62,15 @@ class WandBLogger(BaseLogger):
             lambda x: x.item() if isinstance(x, Array) else x, 
             data
         )
-        wandb.log(
+        self._run.log(
             data,
             step=step
         )
 
     def finish(self) -> None:
-        wandb.finish()
+        self._run.finish()
 
     @property
     def id(self) -> Optional[str]: 
-        return wandb.run.id
+        return self._run.run.id
 
