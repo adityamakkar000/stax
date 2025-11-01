@@ -72,5 +72,5 @@ class WandBLogger(BaseLogger):
 
     @property
     def id(self) -> Optional[str]: 
-        return self._run.run.id
+        return self._run.id
 
