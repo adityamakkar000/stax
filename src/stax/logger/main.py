@@ -31,6 +31,7 @@ class BaseLogger(abc.ABC):
     def flush(self): 
         for metric in self.metrics: 
             self.async_log(**metric)
+        self.metrics = []
 
 
 class WandBLogger(BaseLogger):
