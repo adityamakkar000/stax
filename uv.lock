@@ -253,7 +253,7 @@ name = "jinja2"
 version = "3.1.6"
 source = { registry = "https://download.pytorch.org/whl/cpu" }
 dependencies = [
-    { name = "markupsafe", marker = "sys_platform != 'darwin'" },
+    { name = "markupsafe", marker = "sys_platform != 'darwin' and sys_platform != 'linux'" },
 ]
 wheels = [
     { url = "https://download.pytorch.org/whl/jinja2-3.1.6-py3-none-any.whl" },
@@ -288,9 +288,6 @@ wheels = [
 name = "markupsafe"
 version = "3.0.2"
 source = { registry = "https://download.pytorch.org/whl/cpu" }
-wheels = [
-    { url = "https://download.pytorch.org/whl/MarkupSafe-3.0.2-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:15ab75ef81add55874e7ab7055e9c397312385bd9ced94920f2802310c930396" },
-]
 
 [[package]]
 name = "mdurl"
@@ -793,7 +790,7 @@ dependencies = [
     { name = "jaxtyping" },
     { name = "loguru" },
     { name = "orbax" },
-    { name = "torch", marker = "sys_platform == 'linux' or sys_platform == 'mac'" },
+    { name = "torch", marker = "sys_platform == 'mac'" },
     { name = "wandb" },
 ]
 
@@ -804,7 +801,6 @@ requires-dist = [
     { name = "jaxtyping", specifier = ">=0.3.3" },
     { name = "loguru", specifier = ">=0.7.3" },
     { name = "orbax", specifier = ">=0.1.9" },
-    { name = "torch", marker = "sys_platform == 'linux'", index = "https://download.pytorch.org/whl/cpu" },
     { name = "torch", marker = "sys_platform == 'mac'", specifier = ">=2.9.0", index = "https://download.pytorch.org/whl/cpu" },
     { name = "wandb", specifier = ">=0.22.3" },
 ]
@@ -814,7 +810,7 @@ name = "sympy"
 version = "1.14.0"
 source = { registry = "https://download.pytorch.org/whl/cpu" }
 dependencies = [
-    { name = "mpmath", marker = "sys_platform != 'darwin'" },
+    { name = "mpmath", marker = "sys_platform != 'darwin' and sys_platform != 'linux'" },
 ]
 wheels = [
     { url = "https://download.pytorch.org/whl/sympy-1.14.0-py3-none-any.whl" },
@@ -851,23 +847,13 @@ name = "torch"
 version = "2.9.0+cpu"
 source = { registry = "https://download.pytorch.org/whl/cpu" }
 dependencies = [
-    { name = "filelock", marker = "sys_platform != 'darwin'" },
-    { name = "fsspec", marker = "sys_platform != 'darwin'" },
-    { name = "jinja2", marker = "sys_platform != 'darwin'" },
-    { name = "networkx", marker = "sys_platform != 'darwin'" },
-    { name = "setuptools", marker = "sys_platform != 'darwin'" },
-    { name = "sympy", marker = "sys_platform != 'darwin'" },
-    { name = "typing-extensions", marker = "sys_platform != 'darwin'" },
-]
-wheels = [
-    { url = "https://download.pytorch.org/whl/cpu/torch-2.9.0%2Bcpu-cp313-cp313-manylinux_2_28_aarch64.whl", hash = "sha256:be4438d8dad7f0d5a5e54f0feef8a893446894ec87f102bb1d82dcc4518542e4" },
-    { url = "https://download.pytorch.org/whl/cpu/torch-2.9.0%2Bcpu-cp313-cp313-manylinux_2_28_x86_64.whl", hash = "sha256:6c9b217584400963d5b4daddb3711ec7a3778eab211e18654fba076cce3b8682" },
-    { url = "https://download.pytorch.org/whl/cpu/torch-2.9.0%2Bcpu-cp313-cp313t-manylinux_2_28_aarch64.whl", hash = "sha256:6c777160288b08555820781ae0f3a2c67a59bd24b065e88ca1ec20e2f9dc8ac7" },
-    { url = "https://download.pytorch.org/whl/cpu/torch-2.9.0%2Bcpu-cp313-cp313t-manylinux_2_28_x86_64.whl", hash = "sha256:528fd338311f31c9fb18038cafd00e6eae0bf5ad5577521701acb62510753d18" },
-    { url = "https://download.pytorch.org/whl/cpu/torch-2.9.0%2Bcpu-cp314-cp314-manylinux_2_28_aarch64.whl", hash = "sha256:44aadb735774d4a99525d2ec29126b23016c44a07b02ce6c237dfa61a223dd52" },
-    { url = "https://download.pytorch.org/whl/cpu/torch-2.9.0%2Bcpu-cp314-cp314-manylinux_2_28_x86_64.whl", hash = "sha256:b355e07b7f0c369cb031adfcbff5c37a609abcea091b918a39886412afd2e07d" },
-    { url = "https://download.pytorch.org/whl/cpu/torch-2.9.0%2Bcpu-cp314-cp314t-manylinux_2_28_aarch64.whl", hash = "sha256:fa0d1373d04b30ff8f12d542135d292f1a1ddb7c0d852a3d487a320360e5dab9" },
-    { url = "https://download.pytorch.org/whl/cpu/torch-2.9.0%2Bcpu-cp314-cp314t-manylinux_2_28_x86_64.whl", hash = "sha256:2f49bb57a5fe0dc7f8e73ea9e5d36ebda2ea25b8a714a788f0fc2fc47d20a830" },
+    { name = "filelock", marker = "sys_platform != 'darwin' and sys_platform != 'linux'" },
+    { name = "fsspec", marker = "sys_platform != 'darwin' and sys_platform != 'linux'" },
+    { name = "jinja2", marker = "sys_platform != 'darwin' and sys_platform != 'linux'" },
+    { name = "networkx", marker = "sys_platform != 'darwin' and sys_platform != 'linux'" },
+    { name = "setuptools", marker = "sys_platform != 'darwin' and sys_platform != 'linux'" },
+    { name = "sympy", marker = "sys_platform != 'darwin' and sys_platform != 'linux'" },
+    { name = "typing-extensions", marker = "sys_platform != 'darwin' and sys_platform != 'linux'" },
 ]
 
 [[package]]

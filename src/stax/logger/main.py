@@ -6,6 +6,7 @@ import os
 
 from loguru import logger
 import abc
+from torch.utils.tensorboard import SummaryWriter
 
 class BaseLogger(abc.ABC):
 
@@ -78,10 +79,10 @@ class WandBLogger(BaseLogger):
 
 class TensorboardLogger(BaseLogger):
 
-    def __init__(self, log_dir: str):
+    def __init__(self, name: str, *, log_dir: str = "./tensorboard_logs"):
         super().__init__()
-        from torch.utils.tensorboard import SummaryWriter
 
+        log_dir = os.path.join(log_dir, name) 
         self.writer = SummaryWriter(log_dir=log_dir)
         logger.info(f"Initialized Tensorboard Logger at {log_dir}")
 
@@ -94,4 +95,5 @@ class TensorboardLogger(BaseLogger):
             self.writer.add_scalar(key, value, step)
 
     def finish(self) -> None:
+        self.writer.flush()
         self.writer.close()

@@ -13,8 +13,7 @@ dependencies = [
     "jaxtyping>=0.3.3",
     "loguru>=0.7.3",
     "orbax>=0.1.9",
-    "torch>=2.9.0 ; sys_platform == 'mac'",
-    "torch; sys_platform == 'linux'",
+    "torch",
     "wandb>=0.22.3",
 ]
 
