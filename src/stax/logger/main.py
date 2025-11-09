@@ -6,7 +6,6 @@ import os
 
 from loguru import logger
 import abc
-from torch.utils.tensorboard import SummaryWriter
 
 class BaseLogger(abc.ABC):
 
@@ -77,23 +76,28 @@ class WandBLogger(BaseLogger):
         return self._run.id
 
 
-class TensorboardLogger(BaseLogger):
+# class TensorboardLogger(BaseLogger):
 
-    def __init__(self, name: str, *, log_dir: str = "./tensorboard_logs"):
-        super().__init__()
+#     def __init__(self, log_dir: str):
+#         super().__init__()
 
-        log_dir = os.path.join(log_dir, name) 
-        self.writer = SummaryWriter(log_dir=log_dir)
-        logger.info(f"Initialized Tensorboard Logger at {log_dir}")
+#         self.writer = SummaryWriter(log_dir=self.log_dir)
+#         logger.info(f"Initialized Tensorboard Logger at {log_dir}")
 
-    def async_log(self, step: int, data: dict[str, Any]):
-        data = jax.tree.map(
-            lambda x: x.item() if isinstance(x, Array) else x, 
-            data
-        )
-        for key, value in data.items():
-            self.writer.add_scalar(key, value, step)
+#     def async_log(self, step: int, data: dict[str, Any]):
+#         data = jax.tree.map(
+#             lambda x: x.item() if isinstance(x, Array) else x, 
+#             data
+#         )
+#         for key, value in data.items():
+#             self.writer.add_scalar(key, value, step)
+    
+#     def finish(self) -> None:
+#         self.writer.flush()
+#         self.writer.close()
+        
+#     @property
+#     def id(self) -> Optional[str]: 
+#         return self.log_dir
 
-    def finish(self) -> None:
-        self.writer.flush()
-        self.writer.close()
+    
