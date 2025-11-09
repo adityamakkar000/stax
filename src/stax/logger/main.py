@@ -75,3 +75,23 @@ class WandBLogger(BaseLogger):
     def id(self) -> Optional[str]: 
         return self._run.id
 
+
+class TensorboardLogger(BaseLogger):
+
+    def __init__(self, log_dir: str):
+        super().__init__()
+        from torch.utils.tensorboard import SummaryWriter
+
+        self.writer = SummaryWriter(log_dir=log_dir)
+        logger.info(f"Initialized Tensorboard Logger at {log_dir}")
+
+    def async_log(self, step: int, data: dict[str, Any]):
+        data = jax.tree.map(
+            lambda x: x.item() if isinstance(x, Array) else x, 
+            data
+        )
+        for key, value in data.items():
+            self.writer.add_scalar(key, value, step)
+
+    def finish(self) -> None:
+        self.writer.close()
