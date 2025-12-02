@@ -43,8 +43,8 @@ def process_aux(out: PyTree, has_aux: bool = True) -> PyTree:
 
 
 def get_single_step_fn(fn: StepFn, model: nn.Module):
-    def step_fn(params, *batch: Batch) -> float:
-        return fn(model, params, *batch)
+    def step_fn(params, *batch: Batch, train=True) -> float:
+        return fn(model, params, *batch, train=train)
 
     return step_fn
 
@@ -60,7 +60,7 @@ def train_step(
 ) -> tuple[PyTree, PyTree]:
     def grad_fn(grads: PyTree, batch: PyTree) -> tuple[PyTree, PyTree]:
         grad_fn = jax.value_and_grad(
-            lambda params, *batch: step_fn(params, *batch), has_aux=has_aux
+            lambda params, *batch: step_fn(params, *batch, train=True), has_aux=has_aux
         )
         out, grads = grad_fn(params, *batch)
         metrics = process_aux(out, has_aux=has_aux)
@@ -85,7 +85,7 @@ def val_step(
 ) -> PyTree:
     # carry is a placeholder for scan
     def val_fn(_carry: None, batch: PyTree) -> tuple[None, PyTree]:
-        out = step_fn(params, *batch)
+        out = step_fn(params, *batch, train=False)
         metrics = process_aux(out, has_aux=has_aux)
         return _carry, metrics
 
