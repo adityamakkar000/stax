@@ -1,5 +1,5 @@
 from stax.logger.main import (
-    BaseLogger, 
+    BaseLogger,
     WandBLogger,
     # TensorboardLogger
 )
