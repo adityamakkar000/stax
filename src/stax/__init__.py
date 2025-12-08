@@ -11,7 +11,7 @@ __all__ = [
     setup_dp,
     get_dp_sharding,
     SHARDING_TYPES,
-    BaseLogger, 
+    BaseLogger,
     WandBLogger,
-    Timer, 
+    Tracker,
 ]

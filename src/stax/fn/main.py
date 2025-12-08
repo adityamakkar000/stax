@@ -160,4 +160,7 @@ def get_steps_fn(
             jax.sharding.SingleDeviceSharding(jax.devices()[0]),
         ) * 2
 
+    val_fn = lambda params, *batch: {
+        f"val_{k}": v for k, v in val_fn(params, *batch).items()
+    }
     return train_fn, val_fn, (param_sharding, opt_state_sharding)
