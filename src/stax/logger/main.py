@@ -70,7 +70,8 @@ class WandBLogger(BaseLogger):
         project: str,
         config: Optional[Mapping[str, Any]] = None,
         run_id: Optional[str] = None,
-        *args, **kwargs,
+        *args,
+        **kwargs,
     ):
         super().__init__(*args, **kwargs)
         assert (config is not None) or (run_id is not None), (
