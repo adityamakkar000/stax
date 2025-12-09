@@ -3,17 +3,37 @@ import wandb
 from typing import Any, Mapping, Optional
 from jaxtyping import Array
 import os
+import itertools as it
 
 from loguru import logger
 import abc
-import time
+
+
+def convert_to_scalar(x):
+    return x.item() if isinstance(x, Array) else x
 
 
 class BaseLogger(abc.ABC):
     def __init__(self, metrics_to_print: list[str] = ["loss"]):
         self.prev_metric = None
         self.metric_to_print = metrics_to_print
-        self.start = None 
+        self.start = None
+
+    def __call__(self, step: int, data: dict[str, any]):
+        cur_metrics = {"step": step, "data": data}
+        self.prev_metrics, log_metrics = cur_metrics, self.prev_metric
+        if log_metrics is None:
+            return
+        self.async_log(**log_metrics)
+        self._log(**log_metrics)
+
+    def _log(self, step: int, metrics: dict[str, any]):
+        log_str = it.starmap(
+            lambda k, v: f"{k}: {convert_to_scalar(v):.4f}",
+            filter(lambda kv: kv[0] in self.metric_to_print, metrics.items()),
+        )
+        fmt_str = " | ".join((f"Step : {step}\t\t", *log_str))
+        logger.info(fmt_str)
 
     @abc.abstractmethod
     def async_log(self, step: int, data):
@@ -23,24 +43,26 @@ class BaseLogger(abc.ABC):
     def finish(self):
         raise NotImplementedError("base class ")
 
-    def __call__(self, step: int, data: dict[str, any]):
-        self.flush()
-        self.prev_metric = {"step": step, "data": data}
-        self.start = time.perf_counter()
+    @property
+    @abc.abstractmethod
+    def id(self) -> Optional[str]:
+        raise NotImplementedError("base class ")
 
-    def log(self, step: int, data: dict[str, any]):
-        str_to_print = ", ".join(
-            [f"{k}: {v:.4f}" for k, v in data.items() if k in self.metric_to_print]
-        )
-        logger.info(f"Step {step}: " + str_to_print)
 
-    def flush(self):
-        if self.prev_metric is None:
-            return
-        time_elapsed = time.perf_counter() - self.start
-        self.prev_metricsic["data"]["time_per_step"] = time_elapsed
-        self.async_log(**self.prev_metric)
-        self.log(**self.prev_metric)
+class TextLogger(BaseLogger):
+    def __init__(*args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def async_log(self, step: int, data: dict[str, Any]):
+        pass
+
+    def finish(self) -> None:
+        pass
+
+    @property
+    def id(self) -> Optional[str]:
+        return None
+
 
 class WandBLogger(BaseLogger):
     def __init__(
@@ -49,9 +71,9 @@ class WandBLogger(BaseLogger):
         project: str,
         config: Optional[Mapping[str, Any]] = None,
         run_id: Optional[str] = None,
-        metrics_to_print: list[str] = ["loss"],
+        *args, **kwargs,
     ):
-        super().__init__(metrics_to_print=metrics_to_print)
+        super().__init__(*args, **kwargs)
         assert (config is not None) or (run_id is not None), (
             "Either config or run_id must be provided"
         )
@@ -69,7 +91,7 @@ class WandBLogger(BaseLogger):
         logger.info(f"Initialized WandB Logger with run id {self.id}")
 
     def async_log(self, step: int, data: dict[str, Any]):
-        data = jax.tree.map(lambda x: x.item() if isinstance(x, Array) else x, data)
+        data = jax.tree.map(convert_to_scalar, data)
         self._run.log(data, step=step)
 
     def finish(self) -> None:
