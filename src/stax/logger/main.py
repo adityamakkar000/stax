@@ -17,7 +17,6 @@ class BaseLogger(abc.ABC):
     def __init__(self, metrics_to_print: list[str] = ["loss"]):
         self.prev_metric = None
         self.metric_to_print = metrics_to_print
-        self.start = None
 
     def __call__(self, step: int, data: dict[str, any]):
         cur_metrics = {"step": step, "data": data}
