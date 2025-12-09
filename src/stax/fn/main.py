@@ -115,20 +115,22 @@ def get_steps_fn(
     single_step = get_single_step_fn(step_fn, model)
 
     def train_fn_jit(params, opt_state, *batch):
-        return train_step(
-            single_step,
-            tx,
-            params,
-            opt_state,
-            batch,
-            grad_steps=grad_steps,
-            has_aux=has_aux,
-        )
+        with jax.named_scope("train_step"):
+            return train_step(
+                single_step,
+                tx,
+                params,
+                opt_state,
+                batch,
+                grad_steps=grad_steps,
+                has_aux=has_aux,
+            )
 
     def val_fn_jit(params, *batch):
-        return val_step(
-            single_step, params, batch, eval_steps=eval_steps, has_aux=has_aux
-        )
+        with jax.named_scope("val_step"):
+            return val_step(
+                single_step, params, batch, eval_steps=eval_steps, has_aux=has_aux
+            )
 
     if sharding is not None:
         assert sharding in list(SHARDING_TYPES.keys()), (
@@ -160,7 +162,7 @@ def get_steps_fn(
             jax.sharding.SingleDeviceSharding(jax.devices()[0]),
         ) * 2
 
-    val_fn = lambda params, *batch: {
+    val_fn_final = lambda params, *batch: {
         f"val_{k}": v for k, v in val_fn(params, *batch).items()
     }
-    return train_fn, val_fn, (param_sharding, opt_state_sharding)
+    return train_fn, val_fn_final, (param_sharding, opt_state_sharding)
