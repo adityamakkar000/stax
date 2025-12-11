@@ -9,7 +9,6 @@ def to_abstract(x: any) -> jax.ShapeDtypeStruct:
         return x
     return ocp.utils.to_shape_dtype_struct(x)
 
-
 class Checkpointer:
     """
     A helper class to manage saving and restoring checkpoints in JAX using Orbax.
@@ -96,6 +95,34 @@ class Checkpointer:
 
         tree = self.checkpoint_manager.restore(
             self.latest_step,
+            args=ocp.args.Composite(
+                state=ocp.args.StandardRestore(abstract_tree_state),
+                metadata=ocp.args.JsonRestore(),
+            ),
+        )
+
+        tree_state, tree_metadata = tree.state, tree.metadata
+        return {"state": tree_state, "metadata": tree_metadata}
+    
+    def restore_best(self, *, state: PyTree, best_step: int) -> dict[str, PyTree]:
+        """
+        Restore a checkpoint from a specified best step.
+
+        Args:
+            state (PyTree): Model state structure to match the checkpoint data.
+                Can be concrete (real data) or abstract (jax.ShapeDtypeStructs).
+            best_step (int): The step number of the best checkpoint to restore.
+        Returns:
+            dict[str, PyTree]: A dictionary with keys:
+                - "state": Restored model state.
+                - "metadata": Restored metadata.
+        Raises:
+            ValueError: If no checkpoint is found at the specified best step.
+        """
+        abstract_tree_state: PyTree = jax.tree.map(to_abstract, state)
+
+        tree = self.checkpoint_manager.restore(
+            best_step,
             args=ocp.args.Composite(
                 state=ocp.args.StandardRestore(abstract_tree_state),
                 metadata=ocp.args.JsonRestore(),
