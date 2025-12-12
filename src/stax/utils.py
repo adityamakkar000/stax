@@ -1,5 +1,5 @@
 import time
-from typing import Optional
+from typing import Optional, Callable
 from loguru import logger
 
 import jax
@@ -83,3 +83,52 @@ def convert_to_scalar(x: Any) -> Any:
         The scalar value if x was an array, otherwise x.
     """
     return x.item() if isinstance(x, Array) else x
+
+def estimate_compile_stats(fn: Callable, *args, **kwargs) -> dict[str, float]:
+    """
+    Docstring for estimate_compile_stats
+    
+    :param fn: jitted function to analyze
+    :type fn: Callable
+    :param args: Description
+    :param kwargs: Description
+    :return: Description
+    :rtype: dict[str, float]
+    """
+    compiled_fn = fn.lower(*args, **kwargs).compile()
+    memory_compiled_stats = compiled_fn.memory_analysis()
+    cost_compiled_stats = compiled_fn.cost_analysis()
+    stats = dict()
+
+    if memory_compiled_stats is not None:
+        total = (
+            memory_compiled_stats.temp_size_in_bytes
+            + memory_compiled_stats.argument_size_in_bytes
+            + memory_compiled_stats.output_size_in_bytes
+            - memory_compiled_stats.alias_size_in_bytes
+        )
+
+        stats["temp_size_gb"] = memory_compiled_stats.temp_size_in_bytes / (1024**3)
+        stats["argument_size_gb"] = memory_compiled_stats.argument_size_in_bytes / (
+            1024**3
+        )
+        stats["total_size_gb"] = total / (1024**3)
+
+    if cost_compiled_stats is not None:
+        total_flops_gb = cost_compiled_stats["flops"] / (1024**3)
+        stats["total_flops_gb"] = total_flops_gb
+
+    return stats
+
+
+def is_key(x: jax.Array) -> bool:
+    """
+    Docstring for is_key
+    check for whether x is a key based on its shape
+    
+    :param x: Jax array
+
+    :return: True if x is a key (ndim == 2 and shape[1] == 2), else False
+    """
+    return x.ndim == 2 and x.shape[1] == 2
+
