@@ -87,7 +87,7 @@ def convert_to_scalar(x: Any) -> Any:
 def estimate_compile_stats(fn: Callable, *args, **kwargs) -> dict[str, float]:
     """
     Docstring for estimate_compile_stats
-    
+
     :param fn: jitted function to analyze
     :type fn: Callable
     :param args: Description
@@ -125,10 +125,9 @@ def is_key(x: jax.Array) -> bool:
     """
     Docstring for is_key
     check for whether x is a key based on its shape
-    
+
     :param x: Jax array
 
     :return: True if x is a key (ndim == 2 and shape[1] == 2), else False
     """
     return x.ndim == 2 and x.shape[1] == 2
-

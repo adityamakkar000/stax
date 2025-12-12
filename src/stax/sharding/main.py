@@ -13,6 +13,7 @@ import enum
 from dataclasses import dataclass
 
 from stax.utils import is_key
+
 """
 TODO: 
 - add multihost sharding 
@@ -83,7 +84,6 @@ def get_sharding(
     # TODO: make this different for multicontroller jax
     def shard_data(batch: PyTree) -> PyTree:
         def put_batch_fn(x: Array):
-            
             return jax.device_put(x, replicate_sharding if is_key(x) else data_sharding)
 
         return jax.tree.map(put_batch_fn, batch)
