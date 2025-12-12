@@ -13,7 +13,7 @@ from stax.utils import convert_to_scalar
 class BaseLogger(abc.ABC):
     def __init__(self, metrics_to_print: list[str] = ["loss"]):
         self.prev_metrics = None
-        self.metrics_to_print = metrics_to_print
+        self.metric_to_print = metrics_to_print
         if jax.process_index() == 0:
             self.setup_logger()
 
@@ -23,6 +23,9 @@ class BaseLogger(abc.ABC):
             self.prev_metrics, log_metrics = cur_metrics, self.prev_metrics
             if log_metrics is None:
                 return
+
+            self.async_log(**log_metrics)
+            self._log(**log_metrics)
 
             self.async_log(**log_metrics)
             self._log(**log_metrics)
@@ -38,10 +41,6 @@ class BaseLogger(abc.ABC):
     def finish(self):
         if jax.process_index() == 0:
             self._finish()
-
-    @property
-    def id(self) -> Optional[str]:
-        return self._id() if jax.process_index() == 0 else None
 
     @abc.abstractmethod
     def setup_logger(self):

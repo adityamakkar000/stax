@@ -102,12 +102,13 @@ def val_step(
 def get_steps_fn(
     step_fn: callable,
     model: nn.Module,
-    tx: optax,
+    tx: optax.GradientTransformation,
     has_aux: bool = True,
     grad_steps: int = 1,
     eval_steps: int = 1,
     sharding: str | None = None,
     devices: np.ndarray | None = None,
+    *,
     data_shard_axis: int = 0,
 ) -> tuple[callable, callable, dict]:
     # TODO: make use of shardings
