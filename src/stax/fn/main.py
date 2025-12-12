@@ -1,90 +1,160 @@
 import jax
 from flax import linen as nn
-from jaxtyping import PyTree, Array
-from typing import Union, Callable, Tuple
+from jaxtyping import PyTree, Array, PRNGKeyArray
+from typing import Union, Callable, Tuple, Any, Dict, Optional
 import jax.numpy as jnp
 import optax
 
 import numpy as np
-from stax.sharding import setup_dp, get_dp_sharding, SHARDING_TYPES
+from stax.sharding import setup_dp, SHARDING_TYPES
 
 from jax.sharding import (
     NamedSharding,
     PartitionSpec as P,
 )
 
-
-# TODO: fix all type infromation
-
-jax_key = Union[jax.random.key, jax.random.PRNGKey]
-sharding = jax.sharding.NamedSharding
+# Type Aliases
 Params = PyTree
 Batch = PyTree
 OptState = PyTree
+Metrics = Dict[str, Array]
 
-StepFn = Callable[[Params, Batch], float | tuple[float, PyTree]]
-TrainFn = Callable[[Params, OptState, Batch], tuple[Params, OptState, float]]
-ValFn = Callable[[Params, Batch], float]
+# StepFn: (model, params, *batch, train=True/False) -> Union[loss, (loss, aux)]
+StepFn = Callable[..., Union[float, Tuple[float, PyTree]]]
+# SingleStepFn: (params, *batch, train=True/False) -> Union[loss, (loss, aux)]
+SingleStepFn = Callable[..., Union[float, Tuple[float, PyTree]]]
 
 
-def reshape_key_into_array(key: jax.random.PRNGKey, num_keys) -> Array:
+def reshape_key_into_array(key: PRNGKeyArray, num_keys: int) -> Array:
+    """
+    Splits a JAX PRNGKey into multiple keys and ensures it has a 2D shape.
+
+    Args:
+        key: The source random key.
+        num_keys: The number of keys to split into.
+
+    Returns:
+        An array of keys with shape (num_keys, 2).
+    """
+    if num_keys == 1:
+        return key.reshape(1, 2)
     keys = jnp.array(jax.random.split(key, num_keys))
-    if keys.ndim == 1:
-        keys = keys.reshape(1, -1)
     return keys
 
 
-def process_aux(out: PyTree, has_aux: bool = True) -> PyTree:
+def process_aux(
+    out: Union[Array, Tuple[Array, PyTree]], has_aux: bool = True
+) -> Metrics:
+    """
+    Processes the output of a step function to extract metrics.
+
+    Args:
+        out: The output from the step function. Can be just loss or (loss, aux).
+        has_aux: Whether the output contains auxiliary data (metrics).
+
+    Returns:
+        A dictionary of metrics. If no aux data, returns {'loss': out}.
+    """
     if has_aux:
-        _, metrics = out
+        _, metrics = out  # type: ignore
     else:
         metrics = {"loss": out}
-    return metrics
+    return metrics  # type: ignore
 
 
-def get_single_step_fn(fn: StepFn, model: nn.Module):
-    def step_fn(params, *batch: Batch, train=True) -> float:
+def get_single_step_fn(fn: StepFn, model: nn.Module) -> SingleStepFn:
+    """
+    Wraps a generic step function to bind the model instance.
+
+    Args:
+        fn: The step function taking (model, params, *batch, train).
+        model: The Flax model instance.
+
+    Returns:
+        A function taking (params, *batch, train).
+    """
+
+    def step_fn(
+        params: Params, *batch: Batch, train: bool = True
+    ) -> Union[float, Tuple[float, PyTree]]:
         return fn(model, params, *batch, train=train)
 
     return step_fn
 
 
 def train_step(
-    step_fn: callable,
-    tx: optax,
-    params: PyTree,
-    opt_state: PyTree,
-    batch: PyTree,
+    step_fn: SingleStepFn,
+    tx: optax.GradientTransformation,
+    params: Params,
+    opt_state: OptState,
+    batch: Batch,
     grad_steps: int = 1,
     has_aux: bool = True,
-) -> tuple[PyTree, PyTree]:
-    def grad_fn(grads: PyTree, batch: PyTree) -> tuple[PyTree, PyTree]:
-        grad_fn = jax.value_and_grad(
-            lambda params, *batch: step_fn(params, *batch, train=True), has_aux=has_aux
-        )
-        out, grads = grad_fn(params, *batch)
+) -> Dict[str, Any]:
+    """
+    Performs a training step, including gradient calculation and parameter updates.
+    Supports gradient accumulation via `grad_steps`.
+
+    Args:
+        step_fn: The function computing loss/metrics for a single micro-batch.
+        tx: The Optax gradient transformation (optimizer).
+        params: Current model parameters.
+        opt_state: Current optimizer state.
+        batch: The input batch (potentially containing multiple micro-batches).
+        grad_steps: Number of gradient accumulation steps (micro-batches).
+        has_aux: Whether step_fn returns auxiliary metrics.
+
+    Returns:
+        A dictionary containing updated 'metrics', 'params', and 'opt_state'.
+    """
+
+    def grad_fn(grads: Params, batch: Batch) -> Tuple[Params, Metrics]:
+        def loss_fn(params, *batch):
+            return step_fn(params, *batch, train=True)
+
+        grad_fn_inner = jax.value_and_grad(loss_fn, has_aux=has_aux)
+        out, new_grads = grad_fn_inner(params, *batch)
         metrics = process_aux(out, has_aux=has_aux)
+
+        grads = jax.tree.map(lambda g, ng: g + ng, grads, new_grads)
         return grads, metrics
 
     grads = jax.tree.map(lambda x: jnp.zeros_like(x, dtype=x.dtype), params)
 
     grads, metrics = jax.lax.scan(grad_fn, grads, batch, length=grad_steps)
+
     grads = jax.tree.map(lambda x: x / grad_steps, grads)
     metrics = jax.tree.map(lambda x: x.mean(axis=0), metrics)
+
     updates, opt_state = tx.update(grads, opt_state, params)
     params = optax.apply_updates(params, updates)
+
     return {"metrics": metrics, "params": params, "opt_state": opt_state}
 
 
 def val_step(
-    step_fn: callable,
-    params: PyTree,
-    batch: PyTree,
+    step_fn: SingleStepFn,
+    params: Params,
+    batch: Batch,
     eval_steps: int = 1,
     has_aux: bool = True,
-) -> PyTree:
+) -> Metrics:
+    """
+    Performs a validation step over multiple micro-batches.
+
+    Args:
+        step_fn: The function computing loss/metrics for a single micro-batch.
+        params: Current model parameters.
+        batch: The input batch (potentially containing multiple micro-batches).
+        eval_steps: Number of evaluation steps (micro-batches).
+        has_aux: Whether step_fn returns auxiliary metrics.
+
+    Returns:
+        A dictionary of averaged metrics.
+    """
+
     # carry is a placeholder for scan
-    def val_fn(_carry: None, batch: PyTree) -> tuple[None, PyTree]:
+    def val_fn(_carry: None, batch: Batch) -> Tuple[None, Metrics]:
         out = step_fn(params, *batch, train=False)
         metrics = process_aux(out, has_aux=has_aux)
         return _carry, metrics
@@ -100,22 +170,42 @@ def val_step(
 
 
 def get_steps_fn(
-    step_fn: callable,
+    step_fn: StepFn,
     model: nn.Module,
     tx: optax.GradientTransformation,
     has_aux: bool = True,
     grad_steps: int = 1,
     eval_steps: int = 1,
-    sharding: str | None = None,
-    devices: np.ndarray | None = None,
+    sharding: Optional[str] = None,
+    devices: Optional[np.ndarray] = None,
     *,
     data_shard_axis: int = 0,
-) -> tuple[callable, callable, dict]:
-    # TODO: make use of shardings
+) -> Tuple[Callable, Callable, Tuple[Any, Any]]:
+    """
+    Creates JIT-compiled training and validation functions, optionally with sharding.
 
+    Args:
+        step_fn: The base step function.
+        model: The Flax model instance.
+        tx: The Optax optimizer.
+        has_aux: Whether the step function returns auxiliary metrics.
+        grad_steps: Number of gradient accumulation steps.
+        eval_steps: Number of evaluation steps per batch.
+        sharding: The type of sharding strategy to use (e.g., from SHARDING_TYPES).
+        devices: Array of devices to use for sharding mesh.
+        data_shard_axis: Axis along which to shard data.
+
+    Returns:
+        A tuple containing:
+        - train_fn: JIT-compiled training function.
+        - val_fn: JIT-compiled validation function.
+        - (param_sharding, opt_state_sharding): Sharding specifications for params and optimizer state.
+    """
     single_step = get_single_step_fn(step_fn, model)
 
-    def train_fn_jit(params, opt_state, *batch):
+    def train_fn_jit(
+        params: Params, opt_state: OptState, *batch: Batch
+    ) -> Dict[str, Any]:
         with jax.named_scope("train_step"):
             return train_step(
                 single_step,
@@ -127,7 +217,7 @@ def get_steps_fn(
                 has_aux=has_aux,
             )
 
-    def val_fn_jit(params, *batch):
+    def val_fn_jit(params: Params, *batch: Batch) -> Metrics:
         with jax.named_scope("val_step"):
             return val_step(
                 single_step, params, batch, eval_steps=eval_steps, has_aux=has_aux
@@ -152,19 +242,19 @@ def get_steps_fn(
             },
         )(params, opt_state, *shard_data(batch))
 
-        val_fn = lambda params, *batch: jax.jit(
+        val_fn_internal = lambda params, *batch: jax.jit(
             val_fn_jit, out_shardings=replicate_sharding
         )(params, *shard_data(batch))
 
     else:
         train_fn = jax.jit(train_fn_jit)
-        val_fn = jax.jit(val_fn_jit)
+        val_fn_internal = jax.jit(val_fn_jit)
         param_sharding, opt_state_sharding = (
             jax.sharding.SingleDeviceSharding(jax.devices()[0]),
         ) * 2
 
     val_fn_final = lambda params, *batch: {
-        f"val_{k}": v for k, v in val_fn(params, *batch).items()
+        f"val_{k}": v for k, v in val_fn_internal(params, *batch).items()
     }
 
     return train_fn, val_fn_final, (param_sharding, opt_state_sharding)
