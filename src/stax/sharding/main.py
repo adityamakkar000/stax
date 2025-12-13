@@ -32,7 +32,9 @@ class ShardingType(enum.Enum):
 @dataclass
 class ShardingConfig:
     params_shape: PyTree[jax.ShapeDtypeStruct] = jax.ShapeDtypeStruct((1,), jnp.float32)
-    opt_state_shape: PyTree[jax.ShapeDtypeStruct] = jax.ShapeDtypeStruct((1,), jnp.float32)  
+    opt_state_shape: PyTree[jax.ShapeDtypeStruct] = jax.ShapeDtypeStruct(
+        (1,), jnp.float32
+    )
     sharding_type: ShardingType = ShardingType.SINGLE
     # dp options
     data_shard_dim: int = 0
@@ -42,7 +44,9 @@ class ShardingConfig:
 
     def __post__init__(self):
         if self.sharding_type == ShardingType.FSDP:
-            logger.info("Using FSDP make sure to set `xla_tpu_enable_latency_hiding_scheduler=false` for better comms-compute overlap")
+            logger.info(
+                "Using FSDP make sure to set `xla_tpu_enable_latency_hiding_scheduler=false` for better comms-compute overlap"
+            )
 
 
 def setup_mesh(devices: np.ndarray | None = None):
@@ -87,11 +91,11 @@ def get_sharding(
                     shard = replicate_sharding
                 else:
                     param_tuple = [None for _ in range(config.weight_shard_dim)] + [
-                        mesh.axis_names[0]  
+                        mesh.axis_names[0]
                     ]
-                    shard= NamedSharding(mesh, P(*(param_tuple)))
+                    shard = NamedSharding(mesh, P(*(param_tuple)))
             case ShardingType.SINGLE:
-                shard = SingleDeviceSharding(mesh.devices[0]) 
+                shard = SingleDeviceSharding(mesh.devices[0])
             case _:
                 raise ValueError(f"Unknown sharding type {config.sharding_type}")
         return shard
