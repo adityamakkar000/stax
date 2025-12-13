@@ -18,7 +18,6 @@ dependencies = [
     "orbax>=0.1.9",
     "tensorboard>=2.20.0",
     "tensorboard-plugin-profile>=2.21.3",
-    "typing>=3.10.0.0",
     "wandb>=0.22.3",
 ]
 
