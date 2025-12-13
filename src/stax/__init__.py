@@ -5,15 +5,25 @@ from stax.logger import *
 from stax.utils import *
 
 __all__ = [
+    # checkpointer
     "Checkpointer",
+
+    # fn 
     "get_steps_fn",
+
+    # utils 
     "reshape_key_into_array",
-    "setup_dp",
-    "get_dp_sharding",
-    "SHARDING_TYPES",
+    "Tracker",
+
+    # logger
     "BaseLogger",
     "WandBLogger",
-    "Tracker",
+    
+    # sharding
+    "setup_mesh",
+    "get_sharding",
+    "ShardingConfig",
+    "ShardingType",
 ]
 
 __version__ = "0.1.0"

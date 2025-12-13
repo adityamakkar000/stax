@@ -1,5 +1,6 @@
 import time
-from typing import Optional, Callable
+from typing import Optional, Callable, Any, Type
+from types import TracebackType
 from loguru import logger
 
 import jax
@@ -84,16 +85,17 @@ def convert_to_scalar(x: Any) -> Any:
     """
     return x.item() if isinstance(x, Array) else x
 
-def estimate_compile_stats(fn: Callable, *args, **kwargs) -> dict[str, float]:
+def estimate_compile_stats(fn: Callable, *args: Any, **kwargs: Any) -> dict[str, float]:
     """
-    Docstring for estimate_compile_stats
+    Estimate memory and FLOPs statistics for a JAX function.
 
-    :param fn: jitted function to analyze
-    :type fn: Callable
-    :param args: Description
-    :param kwargs: Description
-    :return: Description
-    :rtype: dict[str, float]
+    Args:
+        fn: The JAX function (e.g., jitted) to analyze.
+        args: Positional arguments to pass to the function.
+        kwargs: Keyword arguments to pass to the function.
+
+    Returns:
+        A dictionary containing estimated stats like memory usage (GB) and FLOPs (GB).
     """
     compiled_fn = fn.lower(*args, **kwargs).compile()
     memory_compiled_stats = compiled_fn.memory_analysis()
@@ -123,11 +125,26 @@ def estimate_compile_stats(fn: Callable, *args, **kwargs) -> dict[str, float]:
 
 def is_key(x: jax.Array) -> bool:
     """
-    Docstring for is_key
-    check for whether x is a key based on its shape
+    Check whether x is a PRNG key based on its shape.
 
-    :param x: Jax array
+    Args:
+        x: The JAX array to check.
 
-    :return: True if x is a key (ndim == 2 and shape[1] == 2), else False
+    Returns:
+        True if x is a key (ndim == 1 and shape[0] == 2 for old keys, or specific dtype for new keys),
+        though this implementation specifically checks for ndim=2 and shape[1]=2.
     """
     return x.ndim == 2 and x.shape[1] == 2
+
+
+def convert_to_scalar(x: Any) -> Any:
+    """
+    Convert a JAX array to a scalar if it is an array, otherwise return as is.
+
+    Args:
+        x: The input value, potentially a JAX Array.
+
+    Returns:
+        The scalar value if x was an array, otherwise x.
+    """
+    return x.item() if isinstance(x, Array) else x
