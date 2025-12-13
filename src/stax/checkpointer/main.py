@@ -9,6 +9,7 @@ def to_abstract(x: any) -> jax.ShapeDtypeStruct:
         return x
     return ocp.utils.to_shape_dtype_struct(x)
 
+
 class Checkpointer:
     """
     A helper class to manage saving and restoring checkpoints in JAX using Orbax.
@@ -47,10 +48,25 @@ class Checkpointer:
             self.checkpoint_dir, options=self.options
         )
 
+        # best checkpoint support
+        self.best_checkpoint_dir: str = f"{self.checkpoint_dir.rstrip('/')}/best"
+        self.best_options: ocp.CheckpointManagerOptions = ocp.CheckpointManagerOptions(
+            max_to_keep=1
+        )
+        self.best_checkpoint_manager: ocp.CheckpointManager = ocp.CheckpointManager(
+            self.best_checkpoint_dir, options=self.best_options
+        )
+
         if self.found_checkpoint:
             logger.info(f"Found checkpoint @ step {self.latest_step}")
         else:
             logger.info(f"No checkpoint found")
+
+        # best checkpoint logging
+        if self.found_best_checkpoint:
+            logger.info(f"Found BEST checkpoint @ step {self.best_step}")
+        else:
+            logger.info("No BEST checkpoint found")
 
     def save_checkpoint(
         self, step: int, *, save_tree: PyTree, metadata: dict[str, any]
@@ -65,6 +81,22 @@ class Checkpointer:
         """
 
         self.checkpoint_manager.save(
+            step,
+            args=ocp.args.Composite(
+                state=ocp.args.StandardSave(save_tree),
+                metadata=ocp.args.JsonSave(metadata),
+            ),
+        )
+
+    # save best checkpoint
+    def save_best_checkpoint(
+        self, step: int, *, save_tree: PyTree, metadata: dict[str, any]
+    ) -> None:
+        """
+        Save a BEST checkpoint (separate directory) containing model state and metadata.
+        This does NOT affect the normal/latest checkpoint retention policy.
+        """
+        self.best_checkpoint_manager.save(
             step,
             args=ocp.args.Composite(
                 state=ocp.args.StandardSave(save_tree),
@@ -103,7 +135,7 @@ class Checkpointer:
 
         tree_state, tree_metadata = tree.state, tree.metadata
         return {"state": tree_state, "metadata": tree_metadata}
-    
+
     def restore_best(self, *, state: PyTree, best_step: int) -> dict[str, PyTree]:
         """
         Restore a checkpoint from a specified best step.
@@ -132,11 +164,38 @@ class Checkpointer:
         tree_state, tree_metadata = tree.state, tree.metadata
         return {"state": tree_state, "metadata": tree_metadata}
 
+    # restore best checkpoint (auto step)
+    def restore_best_auto(self, *, state: PyTree) -> dict[str, PyTree]:
+        """
+        Restore the BEST checkpoint from the best checkpoint directory.
+        Uses the latest_step of best_checkpoint_manager.
+        """
+        if self.best_step is None:
+            raise ValueError("No best checkpoint found")
+
+        abstract_tree_state: PyTree = jax.tree.map(to_abstract, state)
+
+        tree = self.best_checkpoint_manager.restore(
+            self.best_step,
+            args=ocp.args.Composite(
+                state=ocp.args.StandardRestore(abstract_tree_state),
+                metadata=ocp.args.JsonRestore(),
+            ),
+        )
+
+        tree_state, tree_metadata = tree.state, tree.metadata
+        return {"state": tree_state, "metadata": tree_metadata}
+
     def wait_until_finished(self) -> None:
         """
         Block execution until all pending checkpoint save operations have completed.
         """
         self.checkpoint_manager.wait_until_finished()
+
+    # wait for both managers
+    def wait_until_finished_all(self) -> None:
+        self.checkpoint_manager.wait_until_finished()
+        self.best_checkpoint_manager.wait_until_finished()
 
     @property
     def found_checkpoint(self) -> int | None:
@@ -145,3 +204,12 @@ class Checkpointer:
     @property
     def latest_step(self) -> int:
         return self.checkpoint_manager.latest_step()
+
+    # best checkpoint properties
+    @property
+    def best_step(self) -> int | None:
+        return self.best_checkpoint_manager.latest_step()
+
+    @property
+    def found_best_checkpoint(self) -> bool:
+        return isinstance(self.best_step, int)

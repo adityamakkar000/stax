@@ -5,13 +5,18 @@ from stax.logger import *
 from stax.utils import *
 
 __all__ = [
-    Checkpointer,
-    get_steps_fn,
-    reshape_key_into_array,
-    setup_dp,
-    get_dp_sharding,
-    SHARDING_TYPES,
-    BaseLogger,
-    WandBLogger,
-    Tracker,
+    "Checkpointer",
+    "get_steps_fn",
+    "reshape_key_into_array",
+    "setup_dp",
+    "get_dp_sharding",
+    "SHARDING_TYPES",
+    "BaseLogger",
+    "WandBLogger",
+    "Tracker",
 ]
+
+__version__ = "0.1.0"
+
+def __getattr__(name):
+    raise AttributeError(f"module {__name__} has no attribute {name}")
