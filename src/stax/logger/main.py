@@ -13,7 +13,7 @@ from stax.utils import convert_to_scalar
 class BaseLogger(abc.ABC):
     def __init__(self, metrics_to_print: list[str] = ["loss"]):
         self.prev_metrics = None
-        self.metric_to_print = metrics_to_print
+        self.metrics_to_print = metrics_to_print
         if jax.process_index() == 0:
             self.setup_logger()
 
@@ -39,6 +39,10 @@ class BaseLogger(abc.ABC):
         if jax.process_index() == 0:
             self._finish()
 
+    @property
+    def id(self) -> Optional[str]:
+        return self._id() if jax.process_index() == 0 else None
+
     @abc.abstractmethod
     def setup_logger(self):
         raise NotImplementedError("base class ")
@@ -51,14 +55,13 @@ class BaseLogger(abc.ABC):
     def _finish(self) -> None:
         raise NotImplementedError("base class ")
 
-    @property
     @abc.abstractmethod
-    def id(self) -> Optional[str]:
+    def _id(self) -> Optional[str]:
         raise NotImplementedError("base class ")
 
 
 class TextLogger(BaseLogger):
-    def __init__(*args, **kwargs):
+    def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
     def setup_logger(self):
@@ -70,8 +73,7 @@ class TextLogger(BaseLogger):
     def _finish(self) -> None:
         pass
 
-    @property
-    def id(self) -> Optional[str]:
+    def _id(self) -> Optional[str]:
         return None
 
 
@@ -111,6 +113,5 @@ class WandBLogger(BaseLogger):
     def _finish(self) -> None:
         self._run.finish()
 
-    @property
-    def id(self) -> Optional[str]:
+    def _id(self) -> Optional[str]:
         return self._run.id
