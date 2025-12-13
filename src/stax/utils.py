@@ -1,11 +1,9 @@
-import time
-from typing import Optional, Callable, Any, Type
-from types import TracebackType
-from loguru import logger
-
 import jax
 import jax.numpy as jnp
 from jax import Array
+
+import time
+from loguru import logger
 
 from typing import Optional, Callable, Any, Type
 from jaxtyping import PRNGKeyArray
@@ -137,14 +135,33 @@ def is_key(x: jax.Array) -> bool:
     return x.ndim == 2 and x.shape[1] == 2
 
 
-def convert_to_scalar(x: Any) -> Any:
+def reshape_batch_key(key: Array, n_keys: int, dim: int = 1) -> Array:
+    # no carry needed
+    def split_single_key(_carry, key: PRNGKeyArray) -> Array:
+        return _carry, reshape_key_into_array(key, n_keys)
+
+    assert key.ndim >= 2, "Key must have at least a batch dim"
+    _, key = jax.lax.scan(
+        split_single_key,
+        None,
+        key,
+    )
+    key = jnp.moveaxis(key, 1, dim)
+    return key
+
+
+def reshape_key_into_array(key: PRNGKeyArray, num_keys: int) -> Array:
     """
-    Convert a JAX array to a scalar if it is an array, otherwise return as is.
+    Splits a JAX PRNGKey into multiple keys and ensures it has a 2D shape.
 
     Args:
-        x: The input value, potentially a JAX Array.
+        key: The source random key.
+        num_keys: The number of keys to split into.
 
     Returns:
-        The scalar value if x was an array, otherwise x.
+        An array of keys with shape (num_keys, 2).
     """
-    return x.item() if isinstance(x, Array) else x
+    if num_keys == 1:
+        return key.reshape(1, 2)
+    keys = jnp.array(jax.random.split(key, num_keys))
+    return keys

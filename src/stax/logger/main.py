@@ -27,9 +27,6 @@ class BaseLogger(abc.ABC):
             self.async_log(**log_metrics)
             self._log(**log_metrics)
 
-            self.async_log(**log_metrics)
-            self._log(**log_metrics)
-
     def _log(self, step: int, data: dict[str, any]):
         log_str = it.starmap(
             lambda k, v: f"{k}: {convert_to_scalar(v):.4f}",

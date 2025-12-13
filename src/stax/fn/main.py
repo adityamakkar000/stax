@@ -1,19 +1,20 @@
 import jax
 from flax import linen as nn
-from jaxtyping import PyTree, Array, PRNGKeyArray
+from jaxtyping import PyTree, Array
 from typing import Union, Callable, Tuple, Any, Dict, Optional
 import jax.numpy as jnp
 import optax
 
 import numpy as np
 from stax.sharding import setup_mesh, get_sharding, ShardingConfig, ShardingType
+from stax.utils import reshape_key_into_array
 
 from jax.sharding import (
     NamedSharding,
     PartitionSpec as P,
 )
+from functools import partial
 
-# Type Aliases
 Params = PyTree
 Batch = PyTree
 OptState = PyTree
@@ -23,23 +24,6 @@ Metrics = Dict[str, Array]
 StepFn = Callable[..., Union[float, Tuple[float, PyTree]]]
 # SingleStepFn: (params, *batch, train=True/False) -> Union[loss, (loss, aux)]
 SingleStepFn = Callable[..., Union[float, Tuple[float, PyTree]]]
-
-
-def reshape_key_into_array(key: PRNGKeyArray, num_keys: int) -> Array:
-    """
-    Splits a JAX PRNGKey into multiple keys and ensures it has a 2D shape.
-
-    Args:
-        key: The source random key.
-        num_keys: The number of keys to split into.
-
-    Returns:
-        An array of keys with shape (num_keys, 2).
-    """
-    if num_keys == 1:
-        return key.reshape(1, 2)
-    keys = jnp.array(jax.random.split(key, num_keys))
-    return keys
 
 
 def process_aux(
@@ -166,6 +150,7 @@ def val_step(
         length=eval_steps,
     )
     metrics = jax.tree.map(lambda x: x.mean(axis=0), metrics)
+
     return metrics
 
 
@@ -176,7 +161,7 @@ def get_steps_fn(
     has_aux: bool = True,
     grad_steps: int = 1,
     eval_steps: int = 1,
-    sharding: Optional[ShardingConfig] = None,
+    sharding: ShardingConfig = ShardingConfig(),
     devices: Optional[np.ndarray] = None,
 ) -> Tuple[Callable, Callable, Tuple[Any, Any]]:
     """
@@ -201,6 +186,18 @@ def get_steps_fn(
     """
     single_step = get_single_step_fn(step_fn, model)
 
+    if sharding.sharding_type == ShardingType.SINGLE:
+        devices = np.array([jax.devices()[0]])
+    mesh = setup_mesh(devices=devices)
+    shard_data, (param_sharding, opt_state_sharding) = get_sharding(mesh, sharding)
+    replicate_sharding = NamedSharding(mesh, P())
+    out_shardings = {
+        "metrics": replicate_sharding,
+        "params": param_sharding,
+        "opt_state": opt_state_sharding,
+    }
+
+    @partial(jax.jit, out_shardings=out_shardings)
     def train_fn_jit(
         params: Params, opt_state: OptState, *batch: Batch
     ) -> Dict[str, Any]:
@@ -215,39 +212,20 @@ def get_steps_fn(
                 has_aux=has_aux,
             )
 
+    @partial(jax.jit, out_shardings=replicate_sharding)
     def val_fn_jit(params: Params, *batch: Batch) -> Metrics:
         with jax.named_scope("val_step"):
-            return val_step(
-                single_step, params, batch, eval_steps=eval_steps, has_aux=has_aux
+            val_metrics = val_step(
+                single_step,
+                params,
+                batch,
+                eval_steps=eval_steps,
+                has_aux=has_aux,
             )
+            val_metrics = {f"val_{k}": v for k, v in val_metrics.items()}
+            return val_metrics
 
-    if sharding is not None:
-        mesh = setup_mesh(devices=devices)
-        shard_data, (param_sharding, opt_state_sharding) = get_sharding(mesh, sharding)
-        replicate_sharding = NamedSharding(mesh, P())
+    train_fn_final = lambda p, o, *b: train_fn_jit(p, o, *shard_data(b))
+    val_fn_final = lambda p, *b: val_fn_jit(p, *shard_data(b))
 
-        train_fn = lambda params, opt_state, *batch: jax.jit(
-            train_fn_jit,
-            out_shardings={
-                "metrics": replicate_sharding,
-                "params": param_sharding,
-                "opt_state": opt_state_sharding,
-            },
-        )(params, opt_state, *shard_data(batch))
-
-        val_fn_internal = lambda params, *batch: jax.jit(
-            val_fn_jit, out_shardings=replicate_sharding
-        )(params, *shard_data(batch))
-
-    else:
-        train_fn = jax.jit(train_fn_jit)
-        val_fn_internal = jax.jit(val_fn_jit)
-        param_sharding, opt_state_sharding = (
-            jax.sharding.SingleDeviceSharding(jax.devices()[0]),
-        ) * 2
-
-    val_fn_final = lambda params, *batch: {
-        f"val_{k}": v for k, v in val_fn_internal(params, *batch).items()
-    }
-
-    return train_fn, val_fn_final, (param_sharding, opt_state_sharding)
+    return train_fn_final, val_fn_final, (param_sharding, opt_state_sharding)

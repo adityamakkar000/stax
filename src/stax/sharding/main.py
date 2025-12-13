@@ -1,18 +1,19 @@
 import jax
 import jax.numpy as jnp
+
 import numpy as np
-from jaxtyping import PyTree
+
 from loguru import logger
 
-from jax.sharding import NamedSharding, PartitionSpec as P, Mesh
+from jax.sharding import NamedSharding, PartitionSpec as P, Mesh, SingleDeviceSharding
 
 from typing import Union, Callable, Optional
-from jaxtyping import Array
-import enum
+from jaxtyping import Array, PyTree
 
+import enum
 from dataclasses import dataclass
 
-from stax.utils import is_key
+from stax.utils import is_key, reshape_batch_key
 
 """
 TODO: 
@@ -23,19 +24,25 @@ TODO:
 
 
 class ShardingType(enum.Enum):
-    SINGLE = None
+    SINGLE = "single"
     DP = "dp"
     FSDP = "fsdp"
 
 
 @dataclass
 class ShardingConfig:
-    sharding_type: ShardingType = None
+    params_shape: PyTree[jax.ShapeDtypeStruct] = jax.ShapeDtypeStruct((1,), jnp.float32)
+    opt_state_shape: PyTree[jax.ShapeDtypeStruct] = jax.ShapeDtypeStruct((1,), jnp.float32)  
+    sharding_type: ShardingType = ShardingType.SINGLE
     # dp options
-    data_axis: int = 0
+    data_shard_dim: int = 0
     # fsdp options
     min_bytes_for_fsdp: int = 1e6  # 1e6/(1024*1024) = 1MB
-    params_shape: Optional[PyTree] = None
+    weight_shard_dim: int = 0
+
+    def __post__init__(self):
+        if self.sharding_type == ShardingType.FSDP:
+            logger.info("Using FSDP make sure to set `xla_tpu_enable_latency_hiding_scheduler=false` for better comms-compute overlap")
 
 
 def setup_mesh(devices: np.ndarray | None = None):
@@ -45,15 +52,16 @@ def setup_mesh(devices: np.ndarray | None = None):
     if devices is None:
         devices = np.array(jax.devices())
 
+    axis_names = ("dp",)
+    axis_type = (jax.sharding.AxisType.Auto,)
     try:
-        mesh = jax.make_mesh((len(devices),), ("dp",), devices=devices)
+        mesh = jax.make_mesh((len(devices),), axis_names, axis_type, devices=devices)
     except:
         # if jax cannot create optimal mesh layout, make a manual mesh
         logger.warning(
             "Failed to create mesh with make_mesh, falling back to `jax.sharding.Mesh`"
         )
-        mesh = Mesh(devices, ("dp",))
-
+        mesh = Mesh(devices, axis_names, axis_type)
     logger.info(f"setup DP mesh with {mesh}")
     return mesh
 
@@ -66,35 +74,47 @@ def get_sharding(
 
     replicate_sharding = NamedSharding(mesh, P())
 
-    data_tuple = [None for _ in range(config.data_axis)] + [mesh.axis_names[0]]
+    def shard_param(param):
+        match config.sharding_type:
+            case ShardingType.DP:
+                shard = replicate_sharding
+            case ShardingType.FSDP:
+                if (
+                    param.ndim < 2
+                    or jnp.dtype(param.dtype).itemsize * param.size
+                    < config.min_bytes_for_fsdp
+                ):
+                    shard = replicate_sharding
+                else:
+                    param_tuple = [None for _ in range(config.weight_shard_dim)] + [
+                        mesh.axis_names[0]  
+                    ]
+                    shard= NamedSharding(mesh, P(*(param_tuple)))
+            case ShardingType.SINGLE:
+                shard = SingleDeviceSharding(mesh.devices[0]) 
+            case _:
+                raise ValueError(f"Unknown sharding type {config.sharding_type}")
+        return shard
+
+    param_sharding = jax.tree.map(shard_param, config.params_shape)
+    opt_state_sharding = jax.tree.map(shard_param, config.opt_state_shape)
+
+    data_tuple = [None for _ in range(config.data_shard_dim)] + [mesh.axis_names[0]]
     data_sharding = NamedSharding(mesh, P(*(data_tuple)))
-
-    if config.sharding_type == ShardingType.DP:
-        param_sharding = replicate_sharding
-        opt_state_sharding = replicate_sharding
-    elif config.sharding_type == ShardingType.FSDP:
-        if config.params_shape is None:
-            raise ValueError("params_shape must be provided for FSDP sharding")
-        dp_shard = NamedSharding(
-            mesh,
-            P(
-                mesh.axis_names[0],
-            ),
-        )
-
-        def shard_param(param):
-            if param.ndim < 2 or param.nbytes < config.min_bytes_for_fsdp:
-                return replicate_sharding
-            return dp_shard
-
-        param_sharding = jax.tree.map(shard_param, config.params_shape)
-        opt_state_sharding = jax.tree.map(shard_param, config.params_shape)
 
     # TODO: make this different for multicontroller jax
     # using jax.make_array_from_local_devices
     def shard_data(batch: PyTree) -> PyTree:
         def put_batch_fn(x: Array):
-            return jax.device_put(x, replicate_sharding if is_key(x) else data_sharding)
+            if is_key(x):
+                # we can't make new keys for each device
+                # since we are passing shardings to the jit fucntion
+                # so it doens't become a single key in the view of the functoin
+                # unlike shard map
+                # TODO: when we switch to manual sharding then make a new key for now
+                # just keep the same key on all devices
+                return jax.device_put(x, replicate_sharding)
+            return jax.device_put(x, data_sharding)
 
         return jax.tree.map(put_batch_fn, batch)
 
