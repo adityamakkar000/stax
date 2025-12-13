@@ -23,8 +23,19 @@ TODO:
 
 
 class ShardingType(enum.Enum):
+    SINGLE = None
     DP = "dp"
     FSDP = "fsdp"
+
+
+@dataclass
+class ShardingConfig:
+    sharding_type: ShardingType = None
+    # dp options
+    data_axis: int = 0
+    # fsdp options
+    min_bytes_for_fsdp: int = 1e6  # 1e6/(1024*1024) = 1MB
+    params_shape: Optional[PyTree] = None
 
 
 def setup_mesh(devices: np.ndarray | None = None):
@@ -34,10 +45,10 @@ def setup_mesh(devices: np.ndarray | None = None):
     if devices is None:
         devices = np.array(jax.devices())
 
-    # if jax cannot create optimal mesh layout, make a manual mesh
     try:
         mesh = jax.make_mesh((len(devices),), ("dp",), devices=devices)
     except:
+        # if jax cannot create optimal mesh layout, make a manual mesh
         logger.warning(
             "Failed to create mesh with make_mesh, falling back to `jax.sharding.Mesh`"
         )
@@ -48,25 +59,21 @@ def setup_mesh(devices: np.ndarray | None = None):
 
 
 def get_sharding(
-    mesh: Mesh,
-    sharding_type: ShardingType,
-    data_axis: int = 0,
-    *,
-    params_shape: Optional[PyTree] = None,
+    mesh: Mesh, config: ShardingConfig
 ) -> dict[str, Union[PyTree, Callable]]:
     """adapted from https://github.com/kvfrans/jaxtransformer"""
     assert len(mesh.axis_names) == 1, f"dp mesh should only have one mesh"
 
     replicate_sharding = NamedSharding(mesh, P())
 
-    data_tuple = [None for _ in range(data_axis)] + [mesh.axis_names[0]]
+    data_tuple = [None for _ in range(config.data_axis)] + [mesh.axis_names[0]]
     data_sharding = NamedSharding(mesh, P(*(data_tuple)))
 
-    if sharding_type == ShardingType.DP:
+    if config.sharding_type == ShardingType.DP:
         param_sharding = replicate_sharding
         opt_state_sharding = replicate_sharding
-    elif sharding_type == ShardingType.FSDP:
-        if params_shape is None:
+    elif config.sharding_type == ShardingType.FSDP:
+        if config.params_shape is None:
             raise ValueError("params_shape must be provided for FSDP sharding")
         dp_shard = NamedSharding(
             mesh,
@@ -76,12 +83,15 @@ def get_sharding(
         )
 
         def shard_param(param):
-            return replicate_sharding if param.ndim < 2 else dp_shard
+            if param.ndim < 2 or param.nbytes < config.min_bytes_for_fsdp:
+                return replicate_sharding
+            return dp_shard
 
-        param_sharding = jax.tree.map(shard_param, params_shape)
-        opt_state_sharding = jax.tree.map(shard_param, params_shape)
+        param_sharding = jax.tree.map(shard_param, config.params_shape)
+        opt_state_sharding = jax.tree.map(shard_param, config.params_shape)
 
     # TODO: make this different for multicontroller jax
+    # using jax.make_array_from_local_devices
     def shard_data(batch: PyTree) -> PyTree:
         def put_batch_fn(x: Array):
             return jax.device_put(x, replicate_sharding if is_key(x) else data_sharding)
@@ -89,13 +99,3 @@ def get_sharding(
         return jax.tree.map(put_batch_fn, batch)
 
     return shard_data, (param_sharding, opt_state_sharding)
-
-
-SHARDING_TYPES = {
-    "dp": lambda mesh, data_axis=0: get_sharding(
-        mesh, ShardingType.DP, data_axis=data_axis
-    ),
-    "fsdp": lambda mesh, data_axis=0: get_sharding(
-        mesh, ShardingType.FSDP, data_axis=data_axis
-    ),
-}

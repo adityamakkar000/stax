@@ -6,7 +6,7 @@ import jax.numpy as jnp
 import optax
 
 import numpy as np
-from stax.sharding import setup_dp, SHARDING_TYPES
+from stax.sharding import setup_mesh, get_sharding, ShardingConfig, ShardingType
 
 from jax.sharding import (
     NamedSharding,
@@ -176,10 +176,8 @@ def get_steps_fn(
     has_aux: bool = True,
     grad_steps: int = 1,
     eval_steps: int = 1,
-    sharding: Optional[str] = None,
+    sharding: Optional[ShardingConfig] = None,
     devices: Optional[np.ndarray] = None,
-    *,
-    data_shard_axis: int = 0,
 ) -> Tuple[Callable, Callable, Tuple[Any, Any]]:
     """
     Creates JIT-compiled training and validation functions, optionally with sharding.
@@ -224,13 +222,8 @@ def get_steps_fn(
             )
 
     if sharding is not None:
-        assert sharding in list(SHARDING_TYPES.keys()), (
-            f"got {sharding=} but expected it to be in {list(SHARDING_TYPES.keys())}"
-        )
-        mesh = setup_dp(devices=devices)
-        shard_data, (param_sharding, opt_state_sharding) = SHARDING_TYPES[sharding](
-            mesh, data_axis=data_shard_axis
-        )
+        mesh = setup_mesh(devices=devices)
+        shard_data, (param_sharding, opt_state_sharding) = get_sharding(mesh, sharding)
         replicate_sharding = NamedSharding(mesh, P())
 
         train_fn = lambda params, opt_state, *batch: jax.jit(

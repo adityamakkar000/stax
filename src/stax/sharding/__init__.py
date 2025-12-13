@@ -1,1 +1,1 @@
-from stax.sharding.main import setup_dp, get_dp_sharding, SHARDING_TYPES
+from stax.sharding.main import setup_mesh, get_sharding, ShardingConfig, ShardingType
