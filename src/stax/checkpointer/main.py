@@ -9,6 +9,7 @@ def to_abstract(x: any) -> jax.ShapeDtypeStruct:
         return x
     return ocp.utils.to_shape_dtype_struct(x)
 
+
 class Checkpointer:
     """
     A helper class to manage saving and restoring checkpoints in JAX using Orbax.
@@ -71,6 +72,12 @@ class Checkpointer:
             logger.info(f"Found latest checkpoint @ step {self.latest_step}")
         if self.best_key and self.best_found_checkpoint:
             logger.info(f"Found best checkpoint @ step {self.best_step}")
+
+        # best checkpoint logging
+        if self.found_best_checkpoint:
+            logger.info(f"Found BEST checkpoint @ step {self.best_step}")
+        else:
+            logger.info("No BEST checkpoint found")
 
     def save_checkpoint(
         self, step: int, *, save_tree: PyTree, metadata: dict[str, any]
@@ -159,6 +166,28 @@ class Checkpointer:
 
         return {"state": tree.state, "metadata": tree.metadata}
 
+    # restore best checkpoint (auto step)
+    def restore_best_auto(self, *, state: PyTree) -> dict[str, PyTree]:
+        """
+        Restore the BEST checkpoint from the best checkpoint directory.
+        Uses the latest_step of best_checkpoint_manager.
+        """
+        if self.best_step is None:
+            raise ValueError("No best checkpoint found")
+
+        abstract_tree_state: PyTree = jax.tree.map(to_abstract, state)
+
+        tree = self.best_checkpoint_manager.restore(
+            self.best_step,
+            args=ocp.args.Composite(
+                state=ocp.args.StandardRestore(abstract_tree_state),
+                metadata=ocp.args.JsonRestore(),
+            ),
+        )
+
+        tree_state, tree_metadata = tree.state, tree.metadata
+        return {"state": tree_state, "metadata": tree_metadata}
+
     def wait_until_finished(self) -> None:
         """
         Block execution until all pending checkpoint save operations have completed.
@@ -166,6 +195,11 @@ class Checkpointer:
         self.checkpoint_manager.wait_until_finished()
         if self.best_key:
             self.best_checkpoint_manager.wait_until_finished()
+
+    # wait for both managers
+    def wait_until_finished_all(self) -> None:
+        self.checkpoint_manager.wait_until_finished()
+        self.best_checkpoint_manager.wait_until_finished()
 
     @property
     def found_checkpoint(self) -> bool:
