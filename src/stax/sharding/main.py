@@ -13,7 +13,7 @@ from jaxtyping import Array, PyTree
 import enum
 from dataclasses import dataclass
 
-from stax.utils import is_key, reshape_batch_key
+from stax.utils import is_key, move_sharding
 
 """
 TODO: 
@@ -35,7 +35,11 @@ class ShardingConfig:
     opt_state_shape: PyTree[jax.ShapeDtypeStruct] = jax.ShapeDtypeStruct(
         (1,), jnp.float32
     )
+    #general options
     sharding_type: ShardingType = ShardingType.SINGLE
+    #TODO: actually fix this
+    # params_offload: bool = False
+    opt_state_offload: bool = False
     # dp options
     data_shard_dim: int = 0
     # fsdp options
@@ -102,6 +106,7 @@ def get_sharding(
 
     param_sharding = jax.tree.map(shard_param, config.params_shape)
     opt_state_sharding = jax.tree.map(shard_param, config.opt_state_shape)
+    metrics_sharding = replicate_sharding
 
     data_tuple = [None for _ in range(config.data_shard_dim)] + [mesh.axis_names[0]]
     data_sharding = NamedSharding(mesh, P(*(data_tuple)))
@@ -122,4 +127,11 @@ def get_sharding(
 
         return jax.tree.map(put_batch_fn, batch)
 
-    return shard_data, (param_sharding, opt_state_sharding)
+    
+    if config.opt_state_offload: 
+        opt_state_sharding = jax.tree.map(
+            lambda x: move_sharding(x, 'pinned_host'),
+            opt_state_sharding
+        )
+
+    return shard_data, (param_sharding, opt_state_sharding, metrics_sharding)
