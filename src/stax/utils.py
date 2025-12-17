@@ -12,11 +12,21 @@ from types import TracebackType
 from jax.sharding import NamedSharding
 
 def move_sharding(sharding: NamedSharding, memory_kind: str) -> NamedSharding: 
-        memory_kind_arr = ['pinned_host', 'device']
-        if memory_kind not in memory_kind_arr:
-            raise ValueError(f"memory kind not in {memory_kind_arr} got {memory_kind}")
+    """
+    Move the sharding to a different memory kind.
 
-        return NamedSharding(sharding.mesh, sharding.spec, memory_kind=memory_kind)
+    Args:
+        sharding: The original NamedSharding object.
+        memory_kind: The target memory kind, either 'pinned_host' or 'device'.
+
+    Returns:
+        A new NamedSharding object with the specified memory kind.
+    """
+    memory_kind_arr = ['pinned_host', 'device']
+    if memory_kind not in memory_kind_arr:
+        raise ValueError(f"memory kind not in {memory_kind_arr} got {memory_kind}")
+
+    return NamedSharding(sharding.mesh, sharding.spec, memory_kind=memory_kind)
 
 class Tracker:
     """
@@ -173,3 +183,26 @@ def reshape_key_into_array(key: PRNGKeyArray, num_keys: int) -> Array:
         return key.reshape(1, 2)
     keys = jnp.array(jax.random.split(key, num_keys))
     return keys
+
+
+def get_perf_func(trace_path, func: Callable[..., Any], *args, **kwargs) -> None:
+    """
+    Profiles the performance of a JAX function, logging memory usage and execution time.
+    Args:
+        trace_path: Path to save JAX profiler trace.
+        func: The JAX function to profile.
+        args: Positional arguments to pass to the function.
+        kwargs: Keyword arguments to pass to the function.
+    """
+
+    stats = estimate_compile_stats(func, *args, **kwargs)
+    with Tracker(timer=True, trace=trace_path) as t:
+        out = func(*args, **kwargs)
+        jax.tree.map(lambda x: x.block_until_ready(), out)
+
+    logger.info(f"temp memory (GB): {stats['temp_size_gb']:.4f}")
+    logger.info(f"argument memory (GB): {stats['argument_size_gb']:.4f}")
+    logger.info(f"total memory (GB): {stats['total_size_gb']:.4f}")
+    logger.info(f"total flops (GB): {stats['total_flops_gb']:.4f}")
+
+    logger.info(f"Execution time (s): {t.data['time']:.4f}")
