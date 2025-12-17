@@ -7,7 +7,7 @@ import optax
 
 import numpy as np
 from stax.sharding import setup_mesh, get_sharding, ShardingConfig, ShardingType
-from stax.utils import reshape_key_into_array
+from stax.utils import move_sharding
 
 from jax.sharding import (
     NamedSharding,
@@ -24,6 +24,8 @@ Metrics = Dict[str, Array]
 StepFn = Callable[..., Union[float, Tuple[float, PyTree]]]
 # SingleStepFn: (params, *batch, train=True/False) -> Union[loss, (loss, aux)]
 SingleStepFn = Callable[..., Union[float, Tuple[float, PyTree]]]
+
+from loguru import logger
 
 
 def process_aux(
@@ -74,6 +76,8 @@ def train_step(
     batch: Batch,
     grad_steps: int = 1,
     has_aux: bool = True,
+    # offload_params: Optional[PyTree[NamedSharding]] = None,
+    offload_opt_state: Optional[PyTree[NamedSharding]] = None,
 ) -> Dict[str, Any]:
     """
     Performs a training step, including gradient calculation and parameter updates.
@@ -91,6 +95,9 @@ def train_step(
     Returns:
         A dictionary containing updated 'metrics', 'params', and 'opt_state'.
     """
+
+    # if offload_params is not None:
+    #     params = jax.tree.map(jax.device_put, params, offload_params)
 
     def grad_fn(grads: Params, batch: Batch) -> Tuple[Params, Metrics]:
         def loss_fn(params, *batch):
@@ -110,6 +117,8 @@ def train_step(
     grads = jax.tree.map(lambda x: x / grad_steps, grads)
     metrics = jax.tree.map(lambda x: x.mean(axis=0), metrics)
 
+    if offload_opt_state is not None: 
+        opt_state = jax.tree.map(jax.device_put, opt_state, offload_opt_state)
     updates, opt_state = tx.update(grads, opt_state, params)
     params = optax.apply_updates(params, updates)
 
@@ -187,45 +196,58 @@ def get_steps_fn(
     single_step = get_single_step_fn(step_fn, model)
 
     if sharding.sharding_type == ShardingType.SINGLE:
-        devices = np.array([jax.devices()[0]])
+        if devices is None:
+            devices = np.array([jax.devices()[0]])
+        elif devices.size > 1 or devices.ndim > 1: 
+            raise ValueError(f"expected single device got {devices=}")
+        
     mesh = setup_mesh(devices=devices)
-    shard_data, (param_sharding, opt_state_sharding) = get_sharding(mesh, sharding)
-    replicate_sharding = NamedSharding(mesh, P())
+    shard_data, (param_sharding, opt_state_sharding, metrics_sharding) = get_sharding(mesh, sharding)
     out_shardings = {
-        "metrics": replicate_sharding,
+        "metrics": metrics_sharding,
         "params": param_sharding,
         "opt_state": opt_state_sharding,
     }
+
+    offload_opt_state_sharding = None 
+    if sharding.opt_state_offload:
+        offload_opt_state_sharding = jax.tree.map(
+            lambda x: move_sharding(x, 'device'), 
+            opt_state_sharding
+        )
 
     @partial(jax.jit, out_shardings=out_shardings)
     def train_fn_jit(
         params: Params, opt_state: OptState, *batch: Batch
     ) -> Dict[str, Any]:
+        logger.info("compiling train step fn ...")
         with jax.named_scope("train_step"):
             return train_step(
                 single_step,
                 tx,
                 params,
                 opt_state,
-                batch,
+                shard_data(batch),
                 grad_steps=grad_steps,
                 has_aux=has_aux,
+                offload_opt_state=offload_opt_state_sharding
             )
 
-    @partial(jax.jit, out_shardings=replicate_sharding)
+    @partial(jax.jit, out_shardings=metrics_sharding)
     def val_fn_jit(params: Params, *batch: Batch) -> Metrics:
+        logger.info("compiling train step fn ...")
         with jax.named_scope("val_step"):
             val_metrics = val_step(
                 single_step,
                 params,
-                batch,
+                shard_data(batch),
                 eval_steps=eval_steps,
                 has_aux=has_aux,
             )
             val_metrics = {f"val_{k}": v for k, v in val_metrics.items()}
             return val_metrics
 
-    train_fn_final = lambda p, o, *b: train_fn_jit(p, o, *shard_data(b))
-    val_fn_final = lambda p, *b: val_fn_jit(p, *shard_data(b))
+    # train_fn_final = lambda p, o, *b: train_fn_jit(p, o, *shard_data(b))
+    # val_fn_final = lambda p, *b: val_fn_jit(p, *shard_data(b))
 
-    return train_fn_final, val_fn_final, (param_sharding, opt_state_sharding)
+    return train_fn_jit, val_fn_jit, (param_sharding, opt_state_sharding)

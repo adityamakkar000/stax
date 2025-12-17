@@ -9,6 +9,14 @@ from typing import Optional, Callable, Any, Type
 from jaxtyping import PRNGKeyArray
 from types import TracebackType
 
+from jax.sharding import NamedSharding
+
+def move_sharding(sharding: NamedSharding, memory_kind: str) -> NamedSharding: 
+        memory_kind_arr = ['pinned_host', 'device']
+        if memory_kind not in memory_kind_arr:
+            raise ValueError(f"memory kind not in {memory_kind_arr} got {memory_kind}")
+
+        return NamedSharding(sharding.mesh, sharding.spec, memory_kind=memory_kind)
 
 class Tracker:
     """
