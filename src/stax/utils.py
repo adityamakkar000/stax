@@ -11,7 +11,8 @@ from types import TracebackType
 
 from jax.sharding import NamedSharding
 
-def move_sharding(sharding: NamedSharding, memory_kind: str) -> NamedSharding: 
+
+def move_sharding(sharding: NamedSharding, memory_kind: str) -> NamedSharding:
     """
     Move the sharding to a different memory kind.
 
@@ -22,11 +23,12 @@ def move_sharding(sharding: NamedSharding, memory_kind: str) -> NamedSharding:
     Returns:
         A new NamedSharding object with the specified memory kind.
     """
-    memory_kind_arr = ['pinned_host', 'device']
+    memory_kind_arr = ["pinned_host", "device"]
     if memory_kind not in memory_kind_arr:
         raise ValueError(f"memory kind not in {memory_kind_arr} got {memory_kind}")
 
     return NamedSharding(sharding.mesh, sharding.spec, memory_kind=memory_kind)
+
 
 class Tracker:
     """
@@ -100,6 +102,7 @@ def convert_to_scalar(x: Any) -> Any:
         The scalar value if x was an array, otherwise x.
     """
     return x.item() if isinstance(x, Array) else x
+
 
 def estimate_compile_stats(compiled_fn: Callable) -> dict[str, float]:
     """
@@ -192,7 +195,9 @@ def get_perf_func(trace_path, func: Callable[..., Any], *args, **kwargs) -> None
         kwargs: Keyword arguments to pass to the function.
     """
 
-    compiled_fn = func.trace(*args, **kwargs).compile({'xla_enable_transpose_trace' : True})
+    compiled_fn = func.trace(*args, **kwargs).compile(
+        {"xla_enable_transpose_trace": True}
+    )
     stats = estimate_compile_stats(compiled_fn)
     with Tracker(timer=True, trace=trace_path) as t:
         out = func(*args, **kwargs)

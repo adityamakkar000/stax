@@ -114,7 +114,7 @@ def train_step(
     grads = jax.tree.map(lambda x: x / grad_steps, grads)
     metrics = jax.tree.map(lambda x: x.mean(axis=0), metrics)
 
-    if offload_opt_state is not None: 
+    if offload_opt_state is not None:
         opt_state = jax.tree.map(jax.device_put, opt_state, offload_opt_state)
     updates, opt_state = tx.update(grads, opt_state, params)
     params = optax.apply_updates(params, updates)
@@ -195,22 +195,23 @@ def get_steps_fn(
     if sharding.sharding_type == ShardingType.SINGLE:
         if devices is None:
             devices = np.array([jax.devices()[0]])
-        elif devices.size > 1 or devices.ndim > 1: 
+        elif devices.size > 1 or devices.ndim > 1:
             raise ValueError(f"expected single device got {devices=}")
-        
+
     mesh = setup_mesh(devices=devices)
-    shard_data, (param_sharding, opt_state_sharding, metrics_sharding) = get_sharding(mesh, sharding)
+    shard_data, (param_sharding, opt_state_sharding, metrics_sharding) = get_sharding(
+        mesh, sharding
+    )
     out_shardings = {
         "metrics": metrics_sharding,
         "params": param_sharding,
         "opt_state": opt_state_sharding,
     }
 
-    offload_opt_state_sharding = None 
+    offload_opt_state_sharding = None
     if sharding.opt_state_offload:
         offload_opt_state_sharding = jax.tree.map(
-            lambda x: move_sharding(x, 'device'), 
-            opt_state_sharding
+            lambda x: move_sharding(x, "device"), opt_state_sharding
         )
 
     @partial(jax.jit, out_shardings=out_shardings)
@@ -227,7 +228,7 @@ def get_steps_fn(
                 shard_data(batch),
                 grad_steps=grad_steps,
                 has_aux=has_aux,
-                offload_opt_state=offload_opt_state_sharding
+                offload_opt_state=offload_opt_state_sharding,
             )
 
     @partial(jax.jit, out_shardings=metrics_sharding)

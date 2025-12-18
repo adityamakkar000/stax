@@ -35,9 +35,9 @@ class ShardingConfig:
     opt_state_shape: PyTree[jax.ShapeDtypeStruct] = jax.ShapeDtypeStruct(
         (1,), jnp.float32
     )
-    #general options
+    # general options
     sharding_type: ShardingType = ShardingType.SINGLE
-    #TODO: actually fix this
+    # TODO: actually fix this
     # params_offload: bool = False
     opt_state_offload: bool = False
     # dp options
@@ -127,11 +127,9 @@ def get_sharding(
 
         return jax.tree.map(put_batch_fn, batch)
 
-    
-    if config.opt_state_offload: 
+    if config.opt_state_offload:
         opt_state_sharding = jax.tree.map(
-            lambda x: move_sharding(x, 'pinned_host'),
-            opt_state_sharding
+            lambda x: move_sharding(x, "pinned_host"), opt_state_sharding
         )
 
     return shard_data, (param_sharding, opt_state_sharding, metrics_sharding)
