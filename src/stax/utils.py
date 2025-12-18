@@ -202,10 +202,20 @@ def get_perf_func(trace_path, func: Callable[..., Any], *args, **kwargs) -> None
     with Tracker(timer=True, trace=trace_path) as t:
         out = func(*args, **kwargs)
         jax.tree.map(lambda x: x.block_until_ready(), out)
-
-    logger.info(f"temp memory (GB): {stats['temp_size_gb']:.4f}")
-    logger.info(f"argument memory (GB): {stats['argument_size_gb']:.4f}")
-    logger.info(f"total memory (GB): {stats['total_size_gb']:.4f}")
-    logger.info(f"total flops (GB): {stats['total_flops_gb']:.4f}")
-
-    logger.info(f"Execution time (s): {t.data['time']:.4f}")
+    report = (
+        "\n"
+        "================= Profile Report =================\n"
+        "Memory Usage:\n"
+        f"\tTemp:      {stats.get('temp_size_gb', 0):>10.4f} GB\n"
+        f"\tArgument:  {stats.get('argument_size_gb', 0):>10.4f} GB\n"
+        f"\tTotal:     {stats.get('total_size_gb', 0):>10.4f} GB\n"
+        "\n"
+        "Compute:\n"
+        f"\tFLOPs:     {stats.get('total_flops_gb', 0):>10.4f} GB\n"
+        "\n"
+        "Performance:\n"
+        f"\tTime:      {t.data.get('time', 0):>10.4f} s\n"
+        f"\tFLOPs/s:   {stats.get('total_flops_gb', 0) / t.data.get('time', 1):>10.4f} GFLOPs/s\n"
+        "=================================================="
+    )
+    logger.info(report)
