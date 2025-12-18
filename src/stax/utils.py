@@ -101,19 +101,16 @@ def convert_to_scalar(x: Any) -> Any:
     """
     return x.item() if isinstance(x, Array) else x
 
-def estimate_compile_stats(fn: Callable, *args: Any, **kwargs: Any) -> dict[str, float]:
+def estimate_compile_stats(compiled_fn: Callable) -> dict[str, float]:
     """
     Estimate memory and FLOPs statistics for a JAX function.
 
     Args:
-        fn: The JAX function (e.g., jitted) to analyze.
-        args: Positional arguments to pass to the function.
-        kwargs: Keyword arguments to pass to the function.
+        compiled_fn: The JAX-compiled function to analyze.
 
     Returns:
         A dictionary containing estimated stats like memory usage (GB) and FLOPs (GB).
     """
-    compiled_fn = fn.lower(*args, **kwargs).compile()
     memory_compiled_stats = compiled_fn.memory_analysis()
     cost_compiled_stats = compiled_fn.cost_analysis()
     stats = dict()
@@ -195,7 +192,8 @@ def get_perf_func(trace_path, func: Callable[..., Any], *args, **kwargs) -> None
         kwargs: Keyword arguments to pass to the function.
     """
 
-    stats = estimate_compile_stats(func, *args, **kwargs)
+    compiled_fn = func.trace(*args, **kwargs).compile({'xla_enable_transpose_trace' : True})
+    stats = estimate_compile_stats(compiled_fn)
     with Tracker(timer=True, trace=trace_path) as t:
         out = func(*args, **kwargs)
         jax.tree.map(lambda x: x.block_until_ready(), out)
