@@ -96,9 +96,6 @@ def train_step(
         A dictionary containing updated 'metrics', 'params', and 'opt_state'.
     """
 
-    # if offload_params is not None:
-    #     params = jax.tree.map(jax.device_put, params, offload_params)
-
     def grad_fn(grads: Params, batch: Batch) -> Tuple[Params, Metrics]:
         def loss_fn(params, *batch):
             return step_fn(params, *batch, train=True)
