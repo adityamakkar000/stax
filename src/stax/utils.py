@@ -200,7 +200,7 @@ def get_perf_func(trace_path, func: Callable[..., Any], *args, **kwargs) -> None
     )
     stats = estimate_compile_stats(compiled_fn)
     with Tracker(timer=True, trace=trace_path) as t:
-        out = func(*args, **kwargs)
+        out = compiled_fn(*args, **kwargs)
         jax.tree.map(lambda x: x.block_until_ready(), out)
     report = (
         "\n"
