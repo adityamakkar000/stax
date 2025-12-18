@@ -216,7 +216,7 @@ def get_steps_fn(
             lambda x: move_sharding(x, "device"), opt_state_sharding
         )
 
-    @partial(jax.jit, out_shardings=out_shardings)
+    @partial(jax.jit, out_shardings=out_shardings, donate_argnums=(0, 1))
     def train_fn_jit(
         params: Params, opt_state: OptState, *batch: Batch
     ) -> Dict[str, Any]:
