@@ -98,7 +98,8 @@ def train_step(
 
     def grad_fn(grads: Params, batch: Batch) -> Tuple[Params, Metrics]:
         def loss_fn(params, *batch):
-            return step_fn(params, *batch, train=True)
+            with jax.named_scope("fwd_pass"):
+                return step_fn(params, *batch, train=True)
 
         grad_fn_inner = jax.value_and_grad(loss_fn, has_aux=has_aux)
         out, new_grads = grad_fn_inner(params, *batch)
@@ -115,7 +116,8 @@ def train_step(
     metrics = jax.tree.map(lambda x: x.mean(axis=0), metrics)
 
     if offload_opt_state is not None:
-        opt_state = jax.tree.map(jax.device_put, opt_state, offload_opt_state)
+        with jax.named_scope("opt_state_offload"):
+            opt_state = jax.tree.map(jax.device_put, opt_state, offload_opt_state)
     updates, opt_state = tx.update(grads, opt_state, params)
     params = optax.apply_updates(params, updates)
 
@@ -233,7 +235,7 @@ def get_steps_fn(
 
     @partial(jax.jit, out_shardings=metrics_sharding)
     def val_fn_jit(params: Params, *batch: Batch) -> Metrics:
-        logger.info("compiling train step fn ...")
+        logger.info("compiling val fn ...")
         with jax.named_scope("val_step"):
             val_metrics = val_step(
                 single_step,
