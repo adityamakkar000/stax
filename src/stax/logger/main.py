@@ -30,7 +30,7 @@ class BaseLogger(abc.ABC):
     def _log(self, step: int, data: dict[str, any]):
         log_str = it.starmap(
             lambda k, v: f"{k}: {convert_to_scalar(v):.4f}",
-            filter(lambda kv: kv[0] in self.metric_to_print, data.items()),
+            filter(lambda kv: kv[0] in self.metrics_to_print, data.items()),
         )
         fmt_str = " | ".join((f"Step : {step}\t\t", *log_str))
         logger.info(fmt_str)
