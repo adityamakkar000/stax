@@ -177,9 +177,7 @@ def get_perf_func(trace_path, func: Callable[..., Any], *args, **kwargs) -> None
         kwargs: Keyword arguments to pass to the function.
     """
 
-    compiled_fn = func.lower(*args, **kwargs).compile(
-        {"xla_enable_transpose_trace": True}
-    )
+    compiled_fn = func.lower(*args, **kwargs).compile()
 
     with Tracker(timer=True, trace=trace_path) as t:
         out = compiled_fn(*args, **kwargs)
