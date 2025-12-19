@@ -208,6 +208,7 @@ def get_steps_fn(
         "opt_state": opt_state_sharding,
     }
 
+    offload_opt_state_sharding = None
     if sharding.opt_state_offload:
         offload_opt_state_sharding = jax.tree.map(
             lambda x: x.with_memory_kind("device"), opt_state_sharding
