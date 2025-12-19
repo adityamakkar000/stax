@@ -112,6 +112,7 @@ def estimate_compile_stats(compiled_fn: Callable) -> dict[str, float]:
         stats["argument_size_gb"] = memory_compiled_stats.argument_size_in_bytes / (
             1024**3
         )
+        stats["output_size_gb"] = memory_compiled_stats.output_size_in_bytes / (1024**3)
         stats["total_size_gb"] = total / (1024**3)
 
     if cost_compiled_stats is not None:
@@ -195,6 +196,7 @@ def get_perf_func(trace_path, func: Callable[..., Any], *args, **kwargs) -> None
         "Memory Usage:\n"
         f"\tTemp:      {stats.get('temp_size_gb', 0):>12,.4f} GB\n"
         f"\tArgument:  {stats.get('argument_size_gb', 0):>12,.4f} GB\n"
+        f"\tOutput:    {stats.get('output_size_gb', 0):>12,.4f} GB\n"
         f"\tTotal:     {stats.get('total_size_gb', 0):>12,.4f} GB\n"
         "\n"
         "Performance:\n"
