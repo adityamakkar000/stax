@@ -213,7 +213,6 @@ def get_steps_fn(
         offload_opt_state_sharding = jax.tree.map(
             lambda x: x.with_memory_kind("device"), opt_state_sharding
         )
-        logger.info(offload_opt_state_sharding)
 
     @partial(jax.jit, out_shardings=out_shardings, donate_argnums=(0,))
     def train_fn_jit(
