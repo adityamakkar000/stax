@@ -208,7 +208,7 @@ def get_steps_fn(
     )
     logger.info(offload_opt_state_sharding)
 
-    @partial(jax.jit, out_shardings=out_shardings, donate_argnums=(0, 1))
+    @partial(jax.jit, out_shardings=out_shardings, donate_argnums=(0,))
     def train_fn_jit(
         params: Params, opt_state: OptState, *batch: Batch
     ) -> Dict[str, Any]:
