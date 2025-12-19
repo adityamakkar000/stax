@@ -8,10 +8,7 @@ import optax
 import numpy as np
 from stax.sharding import setup_mesh, get_sharding, ShardingConfig, ShardingType
 
-from jax.sharding import (
-    NamedSharding,
-    PartitionSpec as P,
-)
+from jax.sharding import NamedSharding
 from functools import partial
 
 Params = PyTree
@@ -75,7 +72,6 @@ def train_step(
     batch: Batch,
     grad_steps: int = 1,
     has_aux: bool = True,
-    # offload_params: Optional[PyTree[NamedSharding]] = None,
     offload_opt_state: Optional[PyTree[NamedSharding]] = None,
 ) -> Dict[str, Any]:
     """
@@ -213,6 +209,7 @@ def get_steps_fn(
         offload_opt_state_sharding = jax.tree.map(
             lambda x: x.with_memory_kind("device"), opt_state_sharding
         )
+    logger.info(offload_opt_state_sharding)
 
     @partial(jax.jit, out_shardings=out_shardings, donate_argnums=(0, 1))
     def train_fn_jit(
