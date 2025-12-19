@@ -116,8 +116,7 @@ def train_step(
     metrics = jax.tree.map(lambda x: x.mean(axis=0), metrics)
 
     if offload_opt_state is not None:
-        with jax.named_scope("opt_state_offload"):
-            opt_state = jax.tree.map(jax.device_put, opt_state, offload_opt_state)
+        opt_state = jax.tree.map(jax.device_put, opt_state, offload_opt_state)
     updates, opt_state = tx.update(grads, opt_state, params)
     params = optax.apply_updates(params, updates)
 
@@ -213,7 +212,7 @@ def get_steps_fn(
     offload_opt_state_sharding = None
     if sharding.opt_state_offload:
         offload_opt_state_sharding = jax.tree.map(
-            lambda x: move_sharding(x, "device"), opt_state_sharding
+            lambda x: x.with_memory_kind("device"), opt_state_sharding
         )
 
     @partial(jax.jit, out_shardings=out_shardings, donate_argnums=(0, 1))

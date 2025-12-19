@@ -12,24 +12,6 @@ from types import TracebackType
 from jax.sharding import NamedSharding
 
 
-def move_sharding(sharding: NamedSharding, memory_kind: str) -> NamedSharding:
-    """
-    Move the sharding to a different memory kind.
-
-    Args:
-        sharding: The original NamedSharding object.
-        memory_kind: The target memory kind, either 'pinned_host' or 'device'.
-
-    Returns:
-        A new NamedSharding object with the specified memory kind.
-    """
-    memory_kind_arr = ["pinned_host", "device"]
-    if memory_kind not in memory_kind_arr:
-        raise ValueError(f"memory kind not in {memory_kind_arr} got {memory_kind}")
-
-    return NamedSharding(sharding.mesh, sharding.spec, memory_kind=memory_kind)
-
-
 class Tracker:
     """
     Context manager for tracking execution time and JAX profiler traces.
@@ -198,14 +180,14 @@ def get_perf_func(trace_path, func: Callable[..., Any], *args, **kwargs) -> None
     compiled_fn = func.lower(*args, **kwargs).compile(
         {"xla_enable_transpose_trace": True}
     )
-    stats = estimate_compile_stats(compiled_fn)
+
     with Tracker(timer=True, trace=trace_path) as t:
         out = compiled_fn(*args, **kwargs)
         jax.tree.map(lambda x: x.block_until_ready(), out)
     time_s = t.data.get("time", 0.0)
-
-    total_flops_gb = stats.get("total_flops_gb", 0.0)
-    tflops_per_s = (total_flops_gb / time_s) / 1_000 if time_s > 0 else 0.0
+    stats = estimate_compile_stats(compiled_fn)
+    total_flops_tb = stats.get("total_flops_gb", 0.0) / 1024
+    tflops_per_s = (total_flops_tb / time_s) if time_s > 0 else 0.0
 
     report = (
         "\n"
@@ -216,7 +198,7 @@ def get_perf_func(trace_path, func: Callable[..., Any], *args, **kwargs) -> None
         f"\tTotal:     {stats.get('total_size_gb', 0):>12,.4f} GB\n"
         "\n"
         "Performance:\n"
-        f"\tFLOPs:     {total_flops_gb:>12,.4f} GFLOPs\n"
+        f"\tFLOPs:     {total_flops_tb:>12,.4f} TFLOPs\n"
         f"\tTime:      {time_s:>12,.4f} s\n"
         f"\tFLOPs/s:   {tflops_per_s:>12,.4f} TFLOPs/s\n"
         "=================================================="
