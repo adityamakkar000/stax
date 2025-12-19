@@ -110,6 +110,11 @@ def train_step(
     grads = jax.tree.map(lambda x: x / grad_steps, grads)
     metrics = jax.tree.map(lambda x: x.mean(axis=0), metrics)
 
+    if offload_opt_state is not None:
+        opt_state = jax.tree.map(
+            jax.lax.with_sharding_constraint, opt_state, offload_opt_state
+        )
+
     opt_state = jax.tree.map(jax.device_put, opt_state, offload_opt_state)
     updates, opt_state = tx.update(grads, opt_state, params)
     params = optax.apply_updates(params, updates)
