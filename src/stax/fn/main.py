@@ -7,7 +7,6 @@ import optax
 
 import numpy as np
 from stax.sharding import setup_mesh, get_sharding, ShardingConfig, ShardingType
-from stax.utils import move_sharding
 
 from jax.sharding import (
     NamedSharding,
