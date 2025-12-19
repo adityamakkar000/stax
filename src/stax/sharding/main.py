@@ -13,7 +13,7 @@ from jaxtyping import Array, PyTree
 import enum
 from dataclasses import dataclass
 
-from stax.utils import is_key, move_sharding
+from stax.utils import is_key
 
 """
 TODO: 
@@ -129,7 +129,7 @@ def get_sharding(
 
     if config.opt_state_offload:
         opt_state_sharding = jax.tree.map(
-            lambda x: move_sharding(x, "pinned_host"), opt_state_sharding
+            lambda x: x.with_memory_kind("pinned_host"), opt_state_sharding
         )
 
     return shard_data, (param_sharding, opt_state_sharding, metrics_sharding)
