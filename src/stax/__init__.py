@@ -5,7 +5,6 @@ from stax.logger import *
 from stax.utils import *
 
 __all__ = [
-<<<<<<< HEAD
     # checkpointer
     "Checkpointer",
 
@@ -16,7 +15,6 @@ __all__ = [
     "reshape_key_into_array",
     "Tracker",
     "get_perf_func",
-    "move_sharding",
     "is_key",
     "estimate_compile_stats",
     "reshape_batch_key",
