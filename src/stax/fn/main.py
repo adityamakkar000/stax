@@ -112,10 +112,11 @@ def train_step(
 
     if offload_opt_state is not None:
         opt_state = jax.tree.map(
-            jax.lax.with_sharding_constraint, opt_state, offload_opt_state
+            lambda x, sharding: jax.device_put(x, sharding),
+            opt_state,
+            offload_opt_state,
         )
 
-    opt_state = jax.tree.map(jax.device_put, opt_state, offload_opt_state)
     updates, opt_state = tx.update(grads, opt_state, params)
     params = optax.apply_updates(params, updates)
 
@@ -169,6 +170,7 @@ def get_steps_fn(
     eval_steps: int = 1,
     sharding: ShardingConfig = ShardingConfig(),
     devices: Optional[np.ndarray] = None,
+    **jit_kwargs,
 ) -> Tuple[Callable, Callable, Tuple[Any, Any]]:
     """
     Creates JIT-compiled training and validation functions, optionally with sharding.
@@ -214,7 +216,7 @@ def get_steps_fn(
             lambda x: x.with_memory_kind("device"), opt_state_sharding
         )
 
-    @partial(jax.jit, out_shardings=out_shardings, donate_argnums=(0,))
+    @partial(jax.jit, out_shardings=out_shardings, **jit_kwargs)
     def train_fn_jit(
         params: Params, opt_state: OptState, *batch: Batch
     ) -> Dict[str, Any]:
@@ -244,8 +246,5 @@ def get_steps_fn(
             )
             val_metrics = {f"val_{k}": v for k, v in val_metrics.items()}
             return val_metrics
-
-    # train_fn_final = lambda p, o, *b: train_fn_jit(p, o, *shard_data(b))
-    # val_fn_final = lambda p, *b: val_fn_jit(p, *shard_data(b))
 
     return train_fn_jit, val_fn_jit, (param_sharding, opt_state_sharding)

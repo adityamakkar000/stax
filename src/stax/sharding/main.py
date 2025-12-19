@@ -55,7 +55,7 @@ class ShardingConfig:
 
 def setup_mesh(devices: np.ndarray | None = None):
     if not jax.distributed.is_initialized():
-        raise ValueError("jax distributed has not been initalizated")
+        raise ValueError("jax distributed has not been initialized")
 
     if devices is None:
         devices = np.array(jax.devices())
@@ -76,7 +76,7 @@ def setup_mesh(devices: np.ndarray | None = None):
 
 def get_sharding(
     mesh: Mesh, config: ShardingConfig
-) -> dict[str, Union[PyTree, Callable]]:
+) -> tuple[Callable[[PyTree], PyTree], tuple[PyTree, PyTree, PyTree]]:
     """adapted from https://github.com/kvfrans/jaxtransformer"""
     assert len(mesh.axis_names) == 1, f"dp mesh should only have one mesh"
 
