@@ -4,8 +4,10 @@ version = "0.1.0"
 description = "A JAX deep learning stack"
 readme = "README.md"
 authors = [
-    { name = "adityamakkar000", email = "aditymakkar000@gmail.com" }
+    { name = "adityamakkar000", email = "aditymakkar000@gmail.com" },
+    { name = "jindal013", email = "chinmayjindal108@gmail.com" }
 ]
+
 requires-python = ">=3.13"
 dependencies = [
     "flax>=0.12.0",
@@ -13,7 +15,6 @@ dependencies = [
     "jaxtyping>=0.3.3",
     "loguru>=0.7.3",
     "orbax>=0.1.9",
-    "torch",
     "wandb>=0.22.3",
 ]
 
@@ -22,8 +23,9 @@ requires = ["uv_build>=0.8.19,<0.9.0"]
 build-backend = "uv_build"
 
 [tool.uv.sources]
-torch = { index = "pytorch" }
+torch = { index = "pytorch", marker = "sys_platform == 'linux' or sys_platform == 'win32'" }
 
 [[tool.uv.index]]
-name="pytorch"
+name= "pytorch"
 url = "https://download.pytorch.org/whl/cpu"
+explicit = true
