@@ -2,7 +2,7 @@ import jax
 import orbax.checkpoint as ocp
 from loguru import logger
 from jaxtyping import PyTree
-
+from typing import Any, Optional
 
 def to_abstract(x: any) -> jax.ShapeDtypeStruct:
     if isinstance(x, jax.ShapeDtypeStruct):
@@ -23,13 +23,15 @@ class Checkpointer:
         load (int | None): Latest checkpoint step if found, otherwise None.
     """
 
-    def __init__(self, output_dir: str, max_to_keep: int = 1) -> None:
+    def __init__(self, output_dir: str, max_to_keep: int = 1, best_key: str | None = None, best_mode: str = 'min') -> None:
         """
         Initialize the Checkpointer.
 
         Args:
             output_dir (str): Google Cloud Storage path (must start with 'gs').
-            max_to_keep (int, optional): Maximum number of checkpoints to retain. Defaults to 1.
+            max_to_keep (int, optional): Maximum number of checkpoints to retain. Defaults to 1. Applies to both regular and best checkpoints.
+            best_key (str | None, optional): The key in metadata to monitor for best checkpointing. Must return a scale value when indexed into metrics. Defaults to None.
+            best_mode (str, optional): 'min' or 'max' to indicate whether lower or higher values of best_key are better. Defaults to 'min'.
 
         Raises:
             AssertionError: If the provided output_dir is not a valid GCS path.
@@ -38,6 +40,16 @@ class Checkpointer:
             logger.info(
                 "NOT using gs path -- ensure you are not running multicontroller jax"
             )
+        
+        self.best_key = best_key
+
+        if self.best_key: 
+            assert best_mode in ["min", "max"], "best_mode must be 'min' or 'max'."
+            self.best_mode = best_mode
+
+            # assuming that metrics is a PyTree object
+            self.best_fn = lambda metrics: metrics[self.best_key]
+
 
         self.checkpoint_dir: str = output_dir
         self.options: ocp.CheckpointManagerOptions = ocp.CheckpointManagerOptions(
@@ -47,10 +59,23 @@ class Checkpointer:
             self.checkpoint_dir, options=self.options
         )
 
+        # best checkpointer
+        self.best_checkpoint_dir: str = f"{output_dir}/best"
+        self.best_options: ocp.CheckpointManagerOptions = ocp.CheckpointManagerOptions(
+            max_to_keep=max_to_keep, best_fn = self.best_fn, best_mode=self.best_mode
+        )
+        self.best_checkpoint_manager: ocp.CheckpointManager = ocp.CheckpointManager(
+            self.best_checkpoint_dir, options=self.best_options
+        )
+
         if self.found_checkpoint:
-            logger.info(f"Found checkpoint @ step {self.latest_step}")
+            logger.info(f"Found latest checkpoint @ step {self.latest_step}")
         else:
-            logger.info(f"No checkpoint found")
+            logger.info('no most recent checkpoint found')
+        if self.best_found_checkpoint:
+            logger.info(f"Found best checkpoint @ step {self.best_latest_step}")
+        else:
+            logger.info('no best checkpoint found')
 
     def save_checkpoint(
         self, step: int, *, save_tree: PyTree, metadata: dict[str, any]
@@ -71,58 +96,62 @@ class Checkpointer:
                 metadata=ocp.args.JsonSave(metadata),
             ),
         )
-
-    def restore(self, *, state: PyTree) -> dict[str, PyTree]:
-        """
-        Restore a checkpoint from the latest saved step.
-
-        Args:
-            state (PyTree): Model state structure to match the checkpoint data.
-                Can be concrete (real data) or abstract (jax.ShapeDtypeStructs).
-
-        Returns:
-            dict[str, PyTree]: A dictionary with keys:
-                - "state": Restored model state.
-                - "metadata": Restored metadata.
-
-        Raises:
-            ValueError: If no latest checkpoint is found.
-        """
-        if self.found_checkpoint is None:
-            raise ValueError("No latest checkpoint found")
-
-        abstract_tree_state: PyTree = jax.tree.map(to_abstract, state)
-
-        tree = self.checkpoint_manager.restore(
-            self.latest_step,
-            args=ocp.args.Composite(
-                state=ocp.args.StandardRestore(abstract_tree_state),
-                metadata=ocp.args.JsonRestore(),
-            ),
-        )
-
-        tree_state, tree_metadata = tree.state, tree.metadata
-        return {"state": tree_state, "metadata": tree_metadata}
     
-    def restore_best(self, *, state: PyTree, best_step: int) -> dict[str, PyTree]:
+    # best checkpointer save
+    def save_best_checkpoint(
+        self, step: int, *, save_tree: PyTree, metadata: dict[str, any], metrics: dict[str, any]
+    ) -> None:
         """
-        Restore a checkpoint from a specified best step.
+        Save a best checkpoint containing model state and metadata. Orbax will only keep this step 
+        if the metric is better than the previous 'best' step.
+
+        Args:
+            step (int): Training step number.
+            save_tree (PyTree): Model state or other data to checkpoint.
+            metadata (PyTree): Metadata to be saved (e.g., metrics or config).
+            metrics (PyTree): 
+        """
+
+        if self.best_key not in metrics:
+            logger.warning(f"best_key '{self.best_key}' not found in provided metrics.")
+
+        self.best_checkpoint_manager.save(
+            step,
+            args=ocp.args.Composite(
+                state=ocp.args.StandardSave(save_tree),
+                metadata=ocp.args.JsonSave(metadata),
+            ),
+            metrics=metrics,
+        )
+
+    def restore(self, *, state: PyTree, use_best: bool = False) -> dict[str, PyTree]:
+        """
+        Restore a checkpoint from the latest saved step or the best (if use_best = True).
 
         Args:
             state (PyTree): Model state structure to match the checkpoint data.
                 Can be concrete (real data) or abstract (jax.ShapeDtypeStructs).
-            best_step (int): The step number of the best checkpoint to restore.
+            use_best: Bool which determines whether to use the best checkpoint or not
+
         Returns:
             dict[str, PyTree]: A dictionary with keys:
                 - "state": Restored model state.
                 - "metadata": Restored metadata.
+
         Raises:
-            ValueError: If no checkpoint is found at the specified best step.
+            ValueError: If no latest or best checkpoint is found.
         """
+        manager = self.best_checkpoint_manager if use_best else self.checkpoint_manager
+        step = manager.latest_step()
+        
+        if step is None:
+            raise ValueError(f"No checkpoint found in {'best' if use_best else 'latest'} directory.")
+
+
         abstract_tree_state: PyTree = jax.tree.map(to_abstract, state)
 
         tree = self.checkpoint_manager.restore(
-            best_step,
+            step,
             args=ocp.args.Composite(
                 state=ocp.args.StandardRestore(abstract_tree_state),
                 metadata=ocp.args.JsonRestore(),
@@ -131,17 +160,28 @@ class Checkpointer:
 
         tree_state, tree_metadata = tree.state, tree.metadata
         return {"state": tree_state, "metadata": tree_metadata}
+
 
     def wait_until_finished(self) -> None:
         """
         Block execution until all pending checkpoint save operations have completed.
         """
         self.checkpoint_manager.wait_until_finished()
+        self.best_checkpoint_manager.wait_until_finished()
 
     @property
-    def found_checkpoint(self) -> int | None:
-        return isinstance(self.latest_step, int)
+    def found_checkpoint(self) -> bool:
+        return self.latest_step is not None
 
     @property
-    def latest_step(self) -> int:
+    def latest_step(self) -> Optional[int]:
         return self.checkpoint_manager.latest_step()
+
+    @property
+    def best_found_checkpoint(self) -> bool:
+        return self.best_latest_step is not None
+
+    @property
+    def best_latest_step(self) -> Optional[int]:
+        # For the best manager, its "latest" step is the current best step 
+        return self.best_checkpoint_manager.latest_step()
