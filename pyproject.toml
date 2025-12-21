@@ -4,8 +4,10 @@ version = "0.1.0"
 description = "A JAX deep learning stack"
 readme = "README.md"
 authors = [
-    { name = "adityamakkar000", email = "aditymakkar000@gmail.com" } 
+    { name = "adityamakkar000", email = "aditymakkar000@gmail.com" },
+    { name = "jindal013", email = "chinmayjindal108@gmail.com" }
 ]
+
 requires-python = ">=3.13"
 
 dependencies = [
