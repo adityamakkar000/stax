@@ -49,6 +49,8 @@ class Checkpointer:
 
             # assuming that metrics is a PyTree object
             self.best_fn = lambda metrics: metrics[self.best_key]
+        else:
+            self.best_fn = None
 
 
         self.checkpoint_dir: str = output_dir
@@ -73,7 +75,7 @@ class Checkpointer:
         else:
             logger.info('no most recent checkpoint found')
         if self.best_found_checkpoint:
-            logger.info(f"Found best checkpoint @ step {self.best_latest_step}")
+            logger.info(f"Found best checkpoint @ step {self.best_step}")
         else:
             logger.info('no best checkpoint found')
 
@@ -150,7 +152,7 @@ class Checkpointer:
 
         abstract_tree_state: PyTree = jax.tree.map(to_abstract, state)
 
-        tree = self.checkpoint_manager.restore(
+        tree = manager.restore(
             step,
             args=ocp.args.Composite(
                 state=ocp.args.StandardRestore(abstract_tree_state),
@@ -179,9 +181,8 @@ class Checkpointer:
 
     @property
     def best_found_checkpoint(self) -> bool:
-        return self.best_latest_step is not None
+        return self.best_step is not None
 
     @property
-    def best_latest_step(self) -> Optional[int]:
-        # For the best manager, its "latest" step is the current best step 
-        return self.best_checkpoint_manager.latest_step()
+    def best_step(self) -> Optional[int]:
+        return self.best_checkpoint_manager.best_step()
