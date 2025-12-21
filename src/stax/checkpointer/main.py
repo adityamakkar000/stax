@@ -42,42 +42,35 @@ class Checkpointer:
             )
         
         self.best_key = best_key
-
-        if self.best_key: 
-            assert best_mode in ["min", "max"], "best_mode must be 'min' or 'max'."
-            self.best_mode = best_mode
-
-            # assuming that metrics is a PyTree object
-            self.best_fn = lambda metrics: metrics[self.best_key]
-        else:
-            self.best_fn = None
-
-
-        self.checkpoint_dir: str = output_dir
-        self.options: ocp.CheckpointManagerOptions = ocp.CheckpointManagerOptions(
-            max_to_keep=max_to_keep
-        )
+        self.checkpoint_dir = output_dir
+        self.options = ocp.CheckpointManagerOptions(max_to_keep=max_to_keep)
+        
         self.checkpoint_manager: ocp.CheckpointManager = ocp.CheckpointManager(
             self.checkpoint_dir, options=self.options
         )
 
-        # best checkpointer
-        self.best_checkpoint_dir: str = f"{output_dir}/best"
-        self.best_options: ocp.CheckpointManagerOptions = ocp.CheckpointManagerOptions(
-            max_to_keep=max_to_keep, best_fn = self.best_fn, best_mode=self.best_mode
-        )
-        self.best_checkpoint_manager: ocp.CheckpointManager = ocp.CheckpointManager(
-            self.best_checkpoint_dir, options=self.best_options
-        )
+        if self.best_key:
+            assert best_mode in ["min", "max"], "best_mode must be 'min' or 'max'."
+            self.best_mode = best_mode
+            self.best_fn = lambda metrics: metrics[self.best_key]
+
+            self.best_checkpoint_dir: str = f"{output_dir}/best"
+            self.best_options: ocp.CheckpointManagerOptions= ocp.CheckpointManagerOptions(
+                max_to_keep=max_to_keep, 
+                best_fn=self.best_fn, 
+                best_mode=self.best_mode
+            )
+            self.best_checkpoint_manager: ocp.CheckpointManager = ocp.CheckpointManager(
+                self.best_checkpoint_dir, options=self.best_options
+            )
+        else:
+            # if no best_key, we just point to the same manager/dir
+            self.best_checkpoint_manager = self.checkpoint_manager
 
         if self.found_checkpoint:
             logger.info(f"Found latest checkpoint @ step {self.latest_step}")
-        else:
-            logger.info('no most recent checkpoint found')
-        if self.best_found_checkpoint:
+        if self.best_key and self.best_found_checkpoint:
             logger.info(f"Found best checkpoint @ step {self.best_step}")
-        else:
-            logger.info('no best checkpoint found')
 
     def save_checkpoint(
         self, step: int, *, save_tree: PyTree, metadata: dict[str, any]
@@ -113,9 +106,13 @@ class Checkpointer:
             metadata (PyTree): Metadata to be saved (e.g., metrics or config).
             metrics (PyTree): 
         """
+        if not self.best_key:
+            logger.error("Attempted to save 'best' checkpoint but no best_key was configured.")
+            return
 
         if self.best_key not in metrics:
-            logger.warning(f"best_key '{self.best_key}' not found in provided metrics.")
+            logger.error(f"Metric '{self.best_key}' missing. Skipping best checkpoint save.")
+            return
 
         self.best_checkpoint_manager.save(
             step,
@@ -144,11 +141,11 @@ class Checkpointer:
             ValueError: If no latest or best checkpoint is found.
         """
         manager = self.best_checkpoint_manager if use_best else self.checkpoint_manager
-        step = manager.latest_step()
+        
+        step = manager.best_step() if (use_best and self.best_key) else manager.latest_step()
         
         if step is None:
             raise ValueError(f"No checkpoint found in {'best' if use_best else 'latest'} directory.")
-
 
         abstract_tree_state: PyTree = jax.tree.map(to_abstract, state)
 
@@ -160,16 +157,15 @@ class Checkpointer:
             ),
         )
 
-        tree_state, tree_metadata = tree.state, tree.metadata
-        return {"state": tree_state, "metadata": tree_metadata}
-
+        return {"state": tree.state, "metadata": tree.metadata}
 
     def wait_until_finished(self) -> None:
         """
         Block execution until all pending checkpoint save operations have completed.
         """
         self.checkpoint_manager.wait_until_finished()
-        self.best_checkpoint_manager.wait_until_finished()
+        if self.best_key:
+            self.best_checkpoint_manager.wait_until_finished()
 
     @property
     def found_checkpoint(self) -> bool:
@@ -185,4 +181,6 @@ class Checkpointer:
 
     @property
     def best_step(self) -> Optional[int]:
-        return self.best_checkpoint_manager.best_step()
+        if self.best_key:
+            return self.best_checkpoint_manager.best_step()
+        return self.checkpoint_manager.latest_step()
