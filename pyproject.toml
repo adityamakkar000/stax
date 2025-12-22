@@ -27,6 +27,6 @@ build-backend = "uv_build"
 torch = { index = "pytorch", marker = "sys_platform == 'linux' or sys_platform == 'win32'" }
 
 [[tool.uv.index]]
-name= "pytorch"
+name = "pytorch"
 url = "https://download.pytorch.org/whl/cpu"
 explicit = true
