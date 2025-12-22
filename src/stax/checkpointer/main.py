@@ -2,9 +2,9 @@ import jax
 import orbax.checkpoint as ocp
 from loguru import logger
 from jaxtyping import PyTree
-from typing import Optional
+from typing import Any, Optional
 
-def to_abstract(x: any) -> jax.ShapeDtypeStruct:
+def to_abstract(x: Any) -> jax.ShapeDtypeStruct:
     if isinstance(x, jax.ShapeDtypeStruct):
         return x
     return ocp.utils.to_shape_dtype_struct(x)
@@ -33,8 +33,8 @@ class Checkpointer:
 
         Args:
             output_dir (str): Google Cloud Storage path (must start with 'gs').
-            max_to_keep (int, optional): Maximum number of checkpoints to retain. Defaults to 1. Only applies to both regular checkpoints.
-            best_key (str | None, optional): The key for checkpointing. Must return a scale value when indexed into metrics (which will be in metadata). Defaults to None.
+            max_to_keep (int, optional): Maximum number of regular checkpoints to retain. Defaults to 1. Applies only to regular checkpoints
+            best_key (str | None, optional): The key for checkpointing. Must return a scalar value when indexed into metrics (which will be in metadata). Defaults to None.
                 if best_key is provided, ensure that the metrics dict passed in as metadata contains this key.
             best_mode (str, optional): 'min' or 'max' to indicate whether lower or higher values of best_key are better. Defaults to 'min'.
 
@@ -89,7 +89,7 @@ class Checkpointer:
             logger.info("No BEST checkpoint found")
 
     def save_checkpoint(
-        self, step: int, *, save_tree: PyTree, metadata: dict[str, any]
+        self, step: int, *, save_tree: PyTree, metadata: dict[str, Any]
     ) -> None:
         """
         Save a checkpoint containing model state and metadata.
@@ -112,12 +112,12 @@ class Checkpointer:
 
         if self.best_key and self.best_checkpoint_manager is not None:
             if "metrics" not in metadata:
-                logger.error("Metadata missing 'metrics' field required for best checkpointing. Skipping best checkpoint save.")
+                logger.warning("Metadata missing 'metrics' field required for best checkpointing. Skipping best checkpoint save.")
                 return
             
             metrics = metadata["metrics"]
             if self.best_key not in metrics:
-                logger.error(f"Metric '{self.best_key}' missing in metadata['metrics']. Skipping best checkpoint save.")
+                logger.warning(f"Metric '{self.best_key}' missing in metadata['metrics']. Skipping best checkpoint save.")
                 return
 
             self.best_checkpoint_manager.save(
@@ -136,7 +136,7 @@ class Checkpointer:
         Args:
             state (PyTree): Model state structure to match the checkpoint data.
                 Can be concrete (real data) or abstract (jax.ShapeDtypeStructs).
-            use_best: Bool which determines whether to use the best checkpoint or not
+            use_best (bool): Whether to use the best checkpoint or not.  
 
         Returns:
             dict[str, PyTree]: A dictionary with keys:
