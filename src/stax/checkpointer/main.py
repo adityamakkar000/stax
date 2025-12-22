@@ -32,7 +32,7 @@ class Checkpointer:
 
         Args:
             output_dir (str): Google Cloud Storage path (must start with 'gs').
-            max_to_keep (int, optional): Maximum number of checkpoints to retain. Defaults to 1. Applies to both regular and best checkpoints.
+            max_to_keep (int, optional): Maximum number of checkpoints to retain. Defaults to 1. Only applies to both regular checkpoints.
             best_key (str | None, optional): The key for checkpointing. Must return a scale value when indexed into metrics (which will be in metadata). Defaults to None.
                 if best_key is provided, ensure that the metrics dict passed in as metadata contains this key.
             best_mode (str, optional): 'min' or 'max' to indicate whether lower or higher values of best_key are better. Defaults to 'min'.
@@ -63,7 +63,7 @@ class Checkpointer:
 
             self.best_checkpoint_dir: str | None = f"{output_dir}/best"
             self.best_options = ocp.CheckpointManagerOptions(
-                max_to_keep=max_to_keep, 
+                max_to_keep=1, 
                 best_fn=self.best_fn, 
                 best_mode=self.best_mode
             )
