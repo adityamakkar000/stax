@@ -17,9 +17,9 @@ OptState = PyTree
 Metrics = Dict[str, Array]
 
 # StepFn: (model, params, *batch, train=True/False) -> Union[loss, (loss, aux)]
-StepFn = Callable[..., Union[float, Tuple[float, PyTree]]]
+StepFn = Callable[[nn.Module, Params, *Batch, bool], Union[float, Tuple[float, PyTree]]]
 # SingleStepFn: (params, *batch, train=True/False) -> Union[loss, (loss, aux)]
-SingleStepFn = Callable[..., Union[float, Tuple[float, PyTree]]]
+SingleStepFn = Callable[[PyTree, *Batch, bool], Union[float, Tuple[float, PyTree]]]
 
 from loguru import logger
 
@@ -42,26 +42,6 @@ def process_aux(
     else:
         metrics = {"loss": out}
     return metrics  # type: ignore
-
-
-def get_single_step_fn(fn: StepFn, model: nn.Module) -> SingleStepFn:
-    """
-    Wraps a generic step function to bind the model instance.
-
-    Args:
-        fn: The step function taking (model, params, *batch, train).
-        model: The Flax model instance.
-
-    Returns:
-        A function taking (params, *batch, train).
-    """
-
-    def step_fn(
-        params: Params, *batch: Batch, train: bool = True
-    ) -> Union[float, Tuple[float, PyTree]]:
-        return fn(model, params, *batch, train=train)
-
-    return step_fn
 
 
 def train_step(
@@ -176,7 +156,7 @@ def get_steps_fn(
     Creates JIT-compiled training and validation functions, optionally with sharding.
 
     Args:
-        step_fn: The base step function.
+        step_fn: The step function taking (model, params, *batch, train).
         model: The Flax model instance.
         tx: The Optax optimizer.
         has_aux: Whether the step function returns auxiliary metrics.
@@ -192,7 +172,7 @@ def get_steps_fn(
         - val_fn: JIT-compiled validation function.
         - (param_sharding, opt_state_sharding): Sharding specifications for params and optimizer state.
     """
-    single_step = get_single_step_fn(step_fn, model)
+    single_step = partial(step_fn, model)
 
     if sharding.sharding_type == ShardingType.SINGLE:
         if devices is None:
