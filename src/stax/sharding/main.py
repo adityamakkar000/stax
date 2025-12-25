@@ -38,7 +38,7 @@ class ShardingConfig:
     # dp options
     data_shard_dim: int = 0
     # fsdp options
-    min_bytes_for_fsdp: float = 1e6  # 1e6/(1024*1024) = 1MB
+    min_bytes_for_fsdp: int = int(1e6)  # 1e6/(1024*1024) = 1MB
     weight_shard_dim: int = 0
 
     def __post_init__(self):
