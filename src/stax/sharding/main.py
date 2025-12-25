@@ -1,17 +1,14 @@
-import jax
-import jax.numpy as jnp
-
-import numpy as np
-
-from loguru import logger
-
-from jax.sharding import NamedSharding, PartitionSpec as P, Mesh, SingleDeviceSharding
-
-from typing import Callable
-from jaxtyping import Array, PyTree
-
 import enum
 from dataclasses import dataclass
+from typing import Callable
+
+import jax
+import jax.numpy as jnp
+import numpy as np
+from jax.sharding import Mesh, NamedSharding, SingleDeviceSharding
+from jax.sharding import PartitionSpec as P
+from jaxtyping import Array, PyTree
+from loguru import logger
 
 from stax.utils import is_key
 
@@ -58,12 +55,14 @@ def setup_mesh(devices: np.ndarray | None = None):
         raise ValueError("jax distributed has not been initialized")
 
     if devices is None:
-        devices = np.array(jax.devices())
+        devices = np.ndarray(jax.devices())
 
     axis_names = ("dp",)
     axis_type = (jax.sharding.AxisType.Auto,)
     try:
-        mesh = jax.make_mesh((len(devices),), axis_names, axis_type, devices=devices)
+        mesh = jax.make_mesh(
+            (len(devices),), axis_names, axis_type, devices=list(devices)
+        )
     except Exception as _:
         # if jax cannot create optimal mesh layout, make a manual mesh
         logger.warning(

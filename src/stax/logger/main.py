@@ -1,10 +1,11 @@
+import abc
+import itertools as it
+from typing import Any, Mapping, Optional
+
 import jax
 import wandb
-from typing import Any, Mapping, Optional
-import itertools as it
-
 from loguru import logger
-import abc
+
 from stax.utils import convert_to_scalar
 
 
@@ -15,17 +16,17 @@ class BaseLogger(abc.ABC):
         if jax.process_index() == 0:
             self.setup_logger()
 
-    def __call__(self, step: int, data: dict[str, any]):
+    def __call__(self, step: int, data: dict[str, Any]):
         if jax.process_index() == 0:
             cur_metrics = {"step": step, "data": data}
             self.prev_metrics, log_metrics = cur_metrics, self.prev_metrics
             if log_metrics is None:
                 return
 
-            self.async_log(**log_metrics)
-            self._log(**log_metrics)
+            self.async_log(**log_metrics)  # type: ignore
+            self._log(**log_metrics)  # type: ignore
 
-    def _log(self, step: int, data: dict[str, any]):
+    def _log(self, step: int, data: dict[str, Any]):
         log_str = it.starmap(
             lambda k, v: f"{k}: {convert_to_scalar(v):.4f}",
             filter(lambda kv: kv[0] in self.metrics_to_print, data.items()),
@@ -98,9 +99,9 @@ class WandBLogger(BaseLogger):
         self.init_args = init_args
         super().__init__(*args, **kwargs)
 
-    def setup_logger(self):
+    def setup_logger(self, **kwargs):
         self._run = wandb.init(
-            **self.init_args,
+            **self.init_args  # type: ignore
         )
         logger.info(f"Initialized WandB Logger with run id {self.id}")
 

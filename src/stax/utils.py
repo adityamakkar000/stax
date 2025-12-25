@@ -1,13 +1,14 @@
+import time
+from types import TracebackType
+from typing import Any, Optional, Type
+
 import jax
 import jax.numpy as jnp
 from jax import Array
-
-import time
-from loguru import logger
-
-from typing import Optional, Callable, Any, Type
+from jax._src.pjit import JitWrapped
+from jax.stages import Compiled
 from jaxtyping import PRNGKeyArray
-from types import TracebackType
+from loguru import logger
 
 
 class Tracker:
@@ -63,15 +64,6 @@ class Tracker:
             jax.profiler.stop_trace()
             logger.info(f"Stopped JAX Profiler trace at {self.trace}")
 
-    @property
-    def is_profiling(self) -> bool:
-        """
-        Check if profiling is active.
-        Returns:
-            True if profiling is active, False otherwise.
-        """
-        return self.trace
-
 
 def convert_to_scalar(x: Any) -> Any:
     """
@@ -84,7 +76,7 @@ def convert_to_scalar(x: Any) -> Any:
     return x.item() if isinstance(x, Array) else x
 
 
-def estimate_compile_stats(compiled_fn: Callable) -> dict[str, float]:
+def estimate_compile_stats(compiled_fn: Compiled) -> dict[str, float]:
     """
     Estimate memory and FLOPs statistics for a JAX function.
 
@@ -136,8 +128,8 @@ def is_key(x: jax.Array) -> bool:
 
 def reshape_batch_key(key: Array, n_keys: int, dim: int = 1) -> Array:
     # no carry needed
-    def split_single_key(_carry, key: PRNGKeyArray) -> Array:
-        return _carry, reshape_key_into_array(key, n_keys)
+    def split_single_key(_carry: None, key: PRNGKeyArray) -> tuple[None, PRNGKeyArray]:
+        return None, reshape_key_into_array(key, n_keys)
 
     assert key.ndim >= 2, "Key must have at least a batch dim"
     _, key = jax.lax.scan(
@@ -166,7 +158,7 @@ def reshape_key_into_array(key: PRNGKeyArray, num_keys: int) -> Array:
     return keys
 
 
-def get_perf_func(trace_path, func: Callable[..., Any], *args, **kwargs) -> None:
+def get_perf_func(trace_path, func: JitWrapped, *args, **kwargs) -> None:
     """
     Profiles the performance of a JAX function, logging memory usage and execution time.
     Args:

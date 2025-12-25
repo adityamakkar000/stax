@@ -18,9 +18,9 @@ OptState = PyTree
 Metrics = Dict[str, Array]
 
 # StepFn: (model, params, *batch, train=True/False) -> Union[loss, (loss, aux)]
-StepFn = Callable[[nn.Module, Params, *Batch, bool], Union[float, Tuple[float, PyTree]]]
+StepFn = Callable[[nn.Module, Params, *Batch, bool], Union[Array, Tuple[Array, PyTree]]]
 # SingleStepFn: (params, *batch, train=True/False) -> Union[loss, (loss, aux)]
-SingleStepFn = Callable[[PyTree, *Batch, bool], Union[float, Tuple[float, PyTree]]]
+SingleStepFn = Callable[[PyTree, *Batch, bool], Union[Array, Tuple[Array, PyTree]]]
 
 
 def process_aux(
