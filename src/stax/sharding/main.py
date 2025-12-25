@@ -7,7 +7,7 @@ from loguru import logger
 
 from jax.sharding import NamedSharding, PartitionSpec as P, Mesh, SingleDeviceSharding
 
-from typing import Union, Callable, Optional
+from typing import Callable
 from jaxtyping import Array, PyTree
 
 import enum
@@ -43,10 +43,10 @@ class ShardingConfig:
     # dp options
     data_shard_dim: int = 0
     # fsdp options
-    min_bytes_for_fsdp: int = 1e6  # 1e6/(1024*1024) = 1MB
+    min_bytes_for_fsdp: float = 1e6  # 1e6/(1024*1024) = 1MB
     weight_shard_dim: int = 0
 
-    def __post__init__(self):
+    def __post_init__(self):
         if self.sharding_type == ShardingType.FSDP:
             logger.info(
                 "Using FSDP make sure to set `xla_tpu_enable_latency_hiding_scheduler=false` for better comms-compute overlap"
@@ -64,7 +64,7 @@ def setup_mesh(devices: np.ndarray | None = None):
     axis_type = (jax.sharding.AxisType.Auto,)
     try:
         mesh = jax.make_mesh((len(devices),), axis_names, axis_type, devices=devices)
-    except:
+    except Exception as _:
         # if jax cannot create optimal mesh layout, make a manual mesh
         logger.warning(
             "Failed to create mesh with make_mesh, falling back to `jax.sharding.Mesh`"
@@ -78,7 +78,7 @@ def get_sharding(
     mesh: Mesh, config: ShardingConfig
 ) -> tuple[Callable[[PyTree], PyTree], tuple[PyTree, PyTree, PyTree]]:
     """adapted from https://github.com/kvfrans/jaxtransformer"""
-    assert len(mesh.axis_names) == 1, f"dp mesh should only have one mesh"
+    assert len(mesh.axis_names) == 1, "dp mesh should only have one mesh"
 
     replicate_sharding = NamedSharding(mesh, P())
 

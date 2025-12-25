@@ -1,8 +1,6 @@
 import jax
 import wandb
 from typing import Any, Mapping, Optional
-from jaxtyping import Array
-import os
 import itertools as it
 
 from loguru import logger
