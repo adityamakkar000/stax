@@ -1,11 +1,12 @@
-import jax
-import orbax.checkpoint as ocp
-from loguru import logger
-from jaxtyping import PyTree
 from typing import Any, Optional
 
+import jax
+import orbax.checkpoint as ocp
+from jaxtyping import PyTree
+from loguru import logger
 
-def to_abstract(x: Any) -> jax.ShapeDtypeStruct:
+
+def to_abstract(x: Any) -> jax.ShapeDtypeStruct | int | float:
     if isinstance(x, jax.ShapeDtypeStruct):
         return x
     return ocp.utils.to_shape_dtype_struct(x)

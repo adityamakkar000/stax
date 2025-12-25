@@ -1,8 +1,9 @@
 import jax
-from flax import linen as nn
-from jaxtyping import Array
 import jax.numpy as jnp
 import optax
+from flax import linen as nn
+from jaxtyping import Array
+
 from stax.fn.main import get_steps_fn
 
 if __name__ == "__main__":
@@ -25,7 +26,9 @@ if __name__ == "__main__":
     tx = optax.adamw(learning_rate=1e-4)
     opt_state = tx.init(params)
 
-    train_step, val_step = get_steps_fn(step, model, tx, grad_steps=1, has_aux=False)
+    train_step, val_step, shardings = get_steps_fn(
+        step, model, tx, grad_steps=1, has_aux=False
+    )
 
     x_input = jnp.zeros((1, 4, 16))
 
