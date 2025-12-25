@@ -53,7 +53,7 @@ def setup_mesh(devices: np.ndarray | None = None):
         raise ValueError("jax distributed has not been initialized")
 
     if devices is None:
-        devices = np.ndarray(jax.devices())
+        devices = np.array(jax.devices())
 
     axis_names = ("dp",)
     axis_type = (jax.sharding.AxisType.Auto,)
