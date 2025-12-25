@@ -1,8 +1,8 @@
 from stax.sharding.main import (
-    setup_mesh,
-    get_sharding,
     ShardingConfig,
     ShardingType,
+    get_sharding,
+    setup_mesh,
 )
 
 __all__ = [

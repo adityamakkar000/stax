@@ -23,9 +23,7 @@ StepFn = Callable[[nn.Module, Params, *Batch, bool], Union[Array, Tuple[Array, P
 SingleStepFn = Callable[[PyTree, *Batch, bool], Union[Array, Tuple[Array, PyTree]]]
 
 
-def process_aux(
-    out: Union[Array, Tuple[Array, PyTree]], has_aux: bool = True
-) -> Metrics:
+def process_aux(out: Union[Array, Tuple[Array, PyTree]], has_aux: bool = True) -> Metrics:
     """
     Processes the output of a step function to extract metrics.
 
@@ -180,9 +178,7 @@ def get_steps_fn(
             raise ValueError(f"expected single device got {devices=}")
 
     mesh = setup_mesh(devices=devices)
-    shard_data, (param_sharding, opt_state_sharding, metrics_sharding) = get_sharding(
-        mesh, sharding
-    )
+    shard_data, (param_sharding, opt_state_sharding, metrics_sharding) = get_sharding(mesh, sharding)
     out_shardings = {
         "metrics": metrics_sharding,
         "params": param_sharding,
@@ -191,14 +187,10 @@ def get_steps_fn(
 
     offload_opt_state_sharding = None
     if sharding.opt_state_offload:
-        offload_opt_state_sharding = jax.tree.map(
-            lambda x: x.with_memory_kind("device"), opt_state_sharding
-        )
+        offload_opt_state_sharding = jax.tree.map(lambda x: x.with_memory_kind("device"), opt_state_sharding)
 
     @partial(jax.jit, out_shardings=out_shardings, **jit_kwargs)
-    def train_fn_jit(
-        params: Params, opt_state: OptState, *batch: Batch
-    ) -> Dict[str, Any]:
+    def train_fn_jit(params: Params, opt_state: OptState, *batch: Batch) -> Dict[str, Any]:
         logger.info("compiling train step fn ...")
         with jax.named_scope("train_step"):
             return train_step(
