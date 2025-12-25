@@ -4,23 +4,23 @@ from stax.checkpointer import (
 from stax.fn import (
     get_steps_fn,
 )
-from stax.sharding import (
-    setup_mesh,
-    get_sharding,
-    ShardingConfig,
-    ShardingType,
-)
 from stax.logger import (
     BaseLogger,
     WandBLogger,
 )
+from stax.sharding import (
+    ShardingConfig,
+    ShardingType,
+    get_sharding,
+    setup_mesh,
+)
 from stax.utils import (
-    reshape_key_into_array,
     Tracker,
+    estimate_compile_stats,
     get_perf_func,
     is_key,
-    estimate_compile_stats,
     reshape_batch_key,
+    reshape_key_into_array,
 )
 
 __all__ = [
