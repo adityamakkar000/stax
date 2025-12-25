@@ -9,8 +9,6 @@ from typing import Optional, Callable, Any, Type
 from jaxtyping import PRNGKeyArray
 from types import TracebackType
 
-from jax.sharding import NamedSharding
-
 
 class Tracker:
     """

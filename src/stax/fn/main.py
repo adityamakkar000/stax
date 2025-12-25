@@ -1,15 +1,16 @@
-import jax
-from flax import linen as nn
-from jaxtyping import PyTree, Array
-from typing import Union, Callable, Tuple, Any, Dict, Optional
-import jax.numpy as jnp
-import optax
-
-import numpy as np
-from stax.sharding import setup_mesh, get_sharding, ShardingConfig, ShardingType
-
-from jax.sharding import NamedSharding
 from functools import partial
+from typing import Any, Callable, Dict, Optional, Tuple, Union
+
+import jax
+import jax.numpy as jnp
+import numpy as np
+import optax
+from flax import linen as nn
+from jax.sharding import NamedSharding
+from jaxtyping import Array, PyTree
+from loguru import logger
+
+from stax.sharding import ShardingConfig, ShardingType, get_sharding, setup_mesh
 
 Params = PyTree
 Batch = PyTree
@@ -20,8 +21,6 @@ Metrics = Dict[str, Array]
 StepFn = Callable[[nn.Module, Params, *Batch, bool], Union[float, Tuple[float, PyTree]]]
 # SingleStepFn: (params, *batch, train=True/False) -> Union[loss, (loss, aux)]
 SingleStepFn = Callable[[PyTree, *Batch, bool], Union[float, Tuple[float, PyTree]]]
-
-from loguru import logger
 
 
 def process_aux(
