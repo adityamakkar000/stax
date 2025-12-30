@@ -86,7 +86,9 @@ class WandBLogger(BaseLogger):
         *args,
         **kwargs,
     ):
-        assert (config is not None) or (run_id is not None), "Either config or run_id must be provided"
+        assert (config is not None) or (run_id is not None), (
+            "Either config or run_id must be provided"
+        )
         init_args = {"entity": entity, "project": project, "resume": "allow"}
         if run_id is not None:
             init_args["id"] = run_id

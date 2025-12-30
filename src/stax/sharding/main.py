@@ -29,7 +29,9 @@ class ShardingType(enum.Enum):
 @dataclass
 class ShardingConfig:
     params_shape: PyTree[jax.ShapeDtypeStruct] = jax.ShapeDtypeStruct((1,), jnp.float32)
-    opt_state_shape: PyTree[jax.ShapeDtypeStruct] = jax.ShapeDtypeStruct((1,), jnp.float32)
+    opt_state_shape: PyTree[jax.ShapeDtypeStruct] = jax.ShapeDtypeStruct(
+        (1,), jnp.float32
+    )
     # general options
     sharding_type: ShardingType = ShardingType.SINGLE
     # TODO: actually fix this
@@ -58,10 +60,14 @@ def setup_mesh(devices: np.ndarray | None = None):
     axis_names = ("dp",)
     axis_type = (jax.sharding.AxisType.Auto,)
     try:
-        mesh = jax.make_mesh((len(devices),), axis_names, axis_type, devices=list(devices))
+        mesh = jax.make_mesh(
+            (len(devices),), axis_names, axis_type, devices=list(devices)
+        )
     except Exception as _:
         # if jax cannot create optimal mesh layout, make a manual mesh
-        logger.warning("Failed to create mesh with make_mesh, falling back to `jax.sharding.Mesh`")
+        logger.warning(
+            "Failed to create mesh with make_mesh, falling back to `jax.sharding.Mesh`"
+        )
         mesh = Mesh(devices, axis_names, axis_type)
     logger.info(f"setup DP mesh with {mesh}")
     return mesh
@@ -80,10 +86,16 @@ def get_sharding(
             case ShardingType.DP:
                 shard = replicate_sharding
             case ShardingType.FSDP:
-                if param.ndim < 2 or jnp.dtype(param.dtype).itemsize * param.size < config.min_bytes_for_fsdp:
+                if (
+                    param.ndim < 2
+                    or jnp.dtype(param.dtype).itemsize * param.size
+                    < config.min_bytes_for_fsdp
+                ):
                     shard = replicate_sharding
                 else:
-                    param_tuple = [None for _ in range(config.weight_shard_dim)] + [mesh.axis_names[0]]
+                    param_tuple = [None for _ in range(config.weight_shard_dim)] + [
+                        mesh.axis_names[0]
+                    ]
                     shard = NamedSharding(mesh, P(*(param_tuple)))
             case ShardingType.SINGLE:
                 shard = SingleDeviceSharding(mesh.devices[0])
@@ -115,6 +127,8 @@ def get_sharding(
         return jax.tree.map(put_batch_fn, batch)
 
     if config.opt_state_offload:
-        opt_state_sharding = jax.tree.map(lambda x: x.with_memory_kind("pinned_host"), opt_state_sharding)
+        opt_state_sharding = jax.tree.map(
+            lambda x: x.with_memory_kind("pinned_host"), opt_state_sharding
+        )
 
     return shard_data, (param_sharding, opt_state_sharding, metrics_sharding)

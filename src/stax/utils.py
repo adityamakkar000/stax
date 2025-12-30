@@ -102,7 +102,9 @@ def estimate_compile_stats(compiled_fn: Compiled) -> dict[str, float]:
         )
 
         stats["temp_size_gb"] = memory_compiled_stats.temp_size_in_bytes / (1024**3)
-        stats["argument_size_gb"] = memory_compiled_stats.argument_size_in_bytes / (1024**3)
+        stats["argument_size_gb"] = memory_compiled_stats.argument_size_in_bytes / (
+            1024**3
+        )
         stats["output_size_gb"] = memory_compiled_stats.output_size_in_bytes / (1024**3)
         stats["total_size_gb"] = total / (1024**3)
 
@@ -169,7 +171,9 @@ def get_perf_func(trace_path, func: JitWrapped, *args, **kwargs) -> None:
         kwargs: Keyword arguments to pass to the function.
 
     """
-    compiled_fn = func.lower(*args, **kwargs).compile({"xla_enable_transpose_trace": True})
+    compiled_fn = func.lower(*args, **kwargs).compile(
+        {"xla_enable_transpose_trace": True}
+    )
 
     with Tracker(timer=True, trace=trace_path) as t:
         out = compiled_fn(*args, **kwargs)
