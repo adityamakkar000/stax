@@ -5,7 +5,8 @@ description = "A JAX deep learning stack"
 readme = "README.md"
 authors = [
     { name = "adityamakkar000", email = "aditymakkar000@gmail.com" },
-    { name = "jindal013", email = "chinmayjindal108@gmail.com" }
+    { name = "jindal013", email = "chinmayjindal108@gmail.com" },
+    { name = "divyamakkar0", email="divyamakkar000@gmail.com"}
 ]
 
 requires-python = ">=3.11"
@@ -17,6 +18,7 @@ dependencies = [
     "loguru>=0.7.3",
     "orbax>=0.1.9",
     "pre-commit>=4.5.1",
+    "ruff>=0.14.10",
     "tensorboard>=2.20.0",
     "tensorboard-plugin-profile>=2.21.3",
     "wandb>=0.22.3",
