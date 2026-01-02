@@ -38,7 +38,7 @@ class mainMixin:
         raise NotImplementedError("This function hasn't been implemented yet")
 
 
-class HFMixing:
+class HFMixin:
     """
     Hugging Face model mixin class.
     This class provides methods for loading models from Hugging Face.

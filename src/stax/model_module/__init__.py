@@ -1,6 +1,6 @@
-from stax.model_module import HFMixing, mainMixin
+from stax.model_module import HFMixin, mainMixin
 
 __all__ = [
     "mainMixin",
-    "HFMixing",
+    "HFMixin",
 ]

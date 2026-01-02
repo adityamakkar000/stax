@@ -9,7 +9,7 @@ from stax.logger import (
     WandBLogger,
 )
 from stax.model_module import (
-    HFMixing,
+    HFMixin,
     mainMixin,
 )
 from stax.sharding import (
@@ -49,7 +49,7 @@ __all__ = [
     "ShardingType",
     # model_module
     "mainMixin",
-    "HFMixing",
+    "HFMixin",
 ]
 
 __version__ = "0.1.0"
