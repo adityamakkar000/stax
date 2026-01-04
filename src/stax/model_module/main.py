@@ -1,10 +1,13 @@
 import abc
-from typing import Optional
+from typing import Optional, Union
 
+from jax.sharding import Sharding
 from jaxtyping import Array, PyTree
 from optax import GradientTransformation
 
 from stax.checkpointer import Checkpointer
+
+shardingType = Optional[Union[Sharding, tuple[Sharding, ...]]]
 
 
 class modelBase(abc.ABC):
@@ -14,7 +17,9 @@ class modelBase(abc.ABC):
     """
 
     @abc.abstractmethod
-    def init_weights(self, key: Array, tx: Optional[GradientTransformation]) -> PyTree:
+    def init_state(
+        self, rng: Array, tx: Optional[GradientTransformation], *, sharding: shardingType = None, abstract: bool = False
+    ) -> PyTree:
         """
         Initialize model weights and optimizer state.
         Args:
@@ -41,7 +46,7 @@ class modelBase(abc.ABC):
         raise NotImplementedError("This function hasn't been implemented yet")
 
 
-class HFModelBase(abc.ABC, modelBase):
+class HFModelBase(modelBase):
     """
     Hugging Face model abstract base class.
     This class provides methods for loading models from Hugging Face.
