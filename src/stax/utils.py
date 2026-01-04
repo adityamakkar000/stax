@@ -1,3 +1,4 @@
+import os
 import time
 from types import TracebackType
 from typing import Any, Optional, Type
@@ -195,3 +196,18 @@ def get_perf_func(trace_path, func: JitWrapped, *args, **kwargs) -> None:
         "=================================================="
     )
     logger.info(report)
+
+
+def init_distrbuted_jax():
+    """Initializes JAX distributed environment."""
+    RANK = os.environ.get("RANK", None)
+    jax.distributed.initialize(process_id=int(RANK) if RANK else None)
+
+    if jax.process_index() == 0:
+        process_count = jax.process_count()
+        local_devices = len(jax.local_devices())
+        logger.info(f"JAX distributed initialized with {process_count} processes with {local_devices} per host.")
+        all_devices = jax.devices()
+        print(f"Total devices available: {len(all_devices)}")
+        for dev in all_devices:
+            print(f"Device ID: {dev.id}, Platform: {dev.platform}, Kind: {dev.device_kind}")
