@@ -1,3 +1,4 @@
+import abc
 from typing import Optional
 
 from jaxtyping import Array, PyTree
@@ -6,12 +7,13 @@ from optax import GradientTransformation
 from stax.checkpointer import Checkpointer
 
 
-class mainMixin:
+class modelBase(abc.ABC):
     """
-    Main model mixin class.
+    Main model abstract base class.
     This class provides foundational methods for model initialization and checkpoint loading.
     """
 
+    @abc.abstractmethod
     def init_weights(self, key: Array, tx: Optional[GradientTransformation]) -> PyTree:
         """
         Initialize model weights and optimizer state.
@@ -25,6 +27,7 @@ class mainMixin:
         raise NotImplementedError("This function hasn't been implemented yet")
 
     # TODO: implement loading from ckpt_path instead of using checkpointer for only loading params
+    @abc.abstractmethod
     def load_from_ckpt(self, checkpointer: Checkpointer, state: PyTree, use_best: bool = True) -> PyTree:
         """
         Load model weights from a checkpoint.
@@ -38,12 +41,13 @@ class mainMixin:
         raise NotImplementedError("This function hasn't been implemented yet")
 
 
-class HFMixing:
+class HFModelBase(abc.ABC, modelBase):
     """
-    Hugging Face model mixin class.
+    Hugging Face model abstract base class.
     This class provides methods for loading models from Hugging Face.
     """
 
+    @abc.abstractmethod
     def load_from_hf(self, model_name: str) -> PyTree:
         """
         Load model weights from Hugging Face.
