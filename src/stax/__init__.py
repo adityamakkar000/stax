@@ -22,6 +22,7 @@ from stax.utils import (
     Tracker,
     estimate_compile_stats,
     get_perf_func,
+    init_distributed_jax,
     is_key,
     reshape_batch_key,
     reshape_key_into_array,
@@ -39,6 +40,7 @@ __all__ = [
     "is_key",
     "estimate_compile_stats",
     "reshape_batch_key",
+    "init_distributed_jax",
     # logger
     "BaseLogger",
     "WandBLogger",
