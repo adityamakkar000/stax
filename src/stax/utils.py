@@ -201,6 +201,8 @@ def get_perf_func(trace_path, func: JitWrapped, *args, **kwargs) -> None:
 def init_distributed_jax():
     """Initializes JAX distributed environment."""
     RANK = os.environ.get("RANK", None)
+    if not RANK and jax.process_index() == 0:
+        logger.info("JAX distributed got no RANK env variable")
     jax.distributed.initialize(process_id=int(RANK) if RANK else None)
 
     if jax.process_index() == 0:
