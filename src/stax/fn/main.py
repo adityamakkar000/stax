@@ -18,9 +18,9 @@ OptState = PyTree
 Metrics = Dict[str, Array]
 
 # StepFn: (model, params, *batch, train=True/False) -> Union[loss, (loss, aux)]
-StepFn = Callable[[nn.Module, Params, *Batch, bool], Union[Array, Tuple[Array, PyTree]]]
+StepFn = Callable[[nn.Module, Params, Batch, bool], Union[Array, Tuple[Array, PyTree]]]
 # SingleStepFn: (params, *batch, train=True/False) -> Union[loss, (loss, aux)]
-SingleStepFn = Callable[[PyTree, *Batch, bool], Union[Array, Tuple[Array, PyTree]]]
+SingleStepFn = Callable[[Params, Batch, bool], Union[Array, Tuple[Array, PyTree]]]
 
 
 def process_aux(out: Union[Array, Tuple[Array, PyTree]], has_aux: bool = True) -> Metrics:
@@ -69,12 +69,12 @@ def train_step(
     """
 
     def grad_fn(grads: Params, batch: Batch) -> Tuple[Params, Metrics]:
-        def loss_fn(params, *batch):
+        def loss_fn(params: Params, batch: Batch) -> Union[Array, Tuple[Array, PyTree]]:
             with jax.named_scope("fwd_pass"):
-                return step_fn(params, *batch, train=True)
+                return step_fn(params, batch, True)
 
         grad_fn_inner = jax.value_and_grad(loss_fn, has_aux=has_aux)
-        out, new_grads = grad_fn_inner(params, *batch)
+        out, new_grads = grad_fn_inner(params, batch)
         metrics = process_aux(out, has_aux=has_aux)
 
         grads = jax.tree.map(lambda g, ng: g + ng, grads, new_grads)
@@ -123,7 +123,7 @@ def val_step(
 
     # carry is a placeholder for scan
     def val_fn(_carry: None, batch: Batch) -> Tuple[None, Metrics]:
-        out = step_fn(params, *batch, train=False)
+        out = step_fn(params, batch, False)
         metrics = process_aux(out, has_aux=has_aux)
         return _carry, metrics
 
