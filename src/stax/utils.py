@@ -7,6 +7,7 @@ import jax
 import jax.numpy as jnp
 from jax import Array
 from jax._src.pjit import JitWrapped
+from jax.experimental.multihost_utils import sync_global_devices
 from jax.stages import Compiled
 from jaxtyping import PRNGKeyArray
 from loguru import logger
@@ -200,16 +201,26 @@ def get_perf_func(trace_path, func: JitWrapped, *args, **kwargs) -> None:
 
 def init_distributed_jax():
     """Initializes JAX distributed environment."""
+    logger.info("Initializing JAX distributed environment...")
     RANK = os.environ.get("RANK", None)
-    if not RANK and jax.process_index() == 0:
+    if not RANK:
         logger.warning("JAX distributed got no RANK env variable")
-    jax.distributed.initialize(process_id=int(RANK) if RANK else None)
+    else:
+        logger.info(f"JAX distributed RANK env variable: {RANK}")
 
-    if jax.process_index() == 0:
+    # because we don't provide all arugments
+    # we cannot set the rank through the initalize call
+    jax.distributed.initialize()
+    RANK = int(RANK) if RANK else jax.process_index()
+
+    if RANK == 0:
         process_count = jax.process_count()
         local_devices = len(jax.local_devices())
         logger.info(f"JAX distributed initialized with {process_count} processes with {local_devices} per host.")
+        logger.info(f"JAX process index: {jax.process_index()}")
         all_devices = jax.devices()
         logger.info("Devices:")
         for dev in all_devices:
             logger.info(f"\tDevice ID: {dev.id}, Platform: {dev.platform}, Kind: {dev.device_kind}")
+    sync_global_devices("init")
+    return
