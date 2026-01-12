@@ -1,4 +1,4 @@
-from functools import partial
+from functools import partial, wraps
 from typing import Any, Callable, Dict, Optional, Tuple, Union
 
 import jax
@@ -18,9 +18,9 @@ OptState = PyTree
 Metrics = Dict[str, Array]
 
 # StepFn: (model, params, *batch, train=True/False) -> Union[loss, (loss, aux)]
-StepFn = Callable[[nn.Module, Params, Batch, bool], Union[Array, Tuple[Array, PyTree]]]
+StepFn = Callable[[nn.Module, PyTree, tuple[PyTree, ...], bool], Union[Array, Tuple[Array, PyTree]]]
 # SingleStepFn: (params, *batch, train=True/False) -> Union[loss, (loss, aux)]
-SingleStepFn = Callable[[Params, Batch, bool], Union[Array, Tuple[Array, PyTree]]]
+SingleStepFn = Callable[[PyTree, tuple[PyTree, ...], bool], Union[Array, Tuple[Array, PyTree]]]
 
 
 def process_aux(out: Union[Array, Tuple[Array, PyTree]], has_aux: bool = True) -> Metrics:
@@ -71,7 +71,7 @@ def train_step(
     def grad_fn(grads: Params, batch: Batch) -> Tuple[Params, Metrics]:
         def loss_fn(params: Params, batch: Batch) -> Union[Array, Tuple[Array, PyTree]]:
             with jax.named_scope("fwd_pass"):
-                return step_fn(params, batch, True)
+                return step_fn(params, *batch, train=True)  # type: ignore
 
         grad_fn_inner = jax.value_and_grad(loss_fn, has_aux=has_aux)
         out, new_grads = grad_fn_inner(params, batch)
@@ -123,7 +123,7 @@ def val_step(
 
     # carry is a placeholder for scan
     def val_fn(_carry: None, batch: Batch) -> Tuple[None, Metrics]:
-        out = step_fn(params, batch, False)
+        out = step_fn(params, *batch, train=False)  # type: ignore
         metrics = process_aux(out, has_aux=has_aux)
         return _carry, metrics
 
@@ -189,6 +189,7 @@ def get_steps_fn(
     if sharding.opt_state_offload:
         offload_opt_state_sharding = jax.tree.map(lambda x: x.with_memory_kind("device"), opt_state_sharding)
 
+    @wraps
     @partial(jax.jit, out_shardings=out_shardings, **jit_kwargs)
     def train_fn_jit(params: Params, opt_state: OptState, *batch: Batch) -> Dict[str, Any]:
         logger.info("compiling train step fn ...")
@@ -204,6 +205,7 @@ def get_steps_fn(
                 offload_opt_state=offload_opt_state_sharding,
             )
 
+    @wraps
     @partial(jax.jit, out_shardings=metrics_sharding)
     def val_fn_jit(params: Params, *batch: Batch) -> Metrics:
         logger.info("compiling val fn ...")
