@@ -6,6 +6,7 @@ from stax.fn import (
 )
 from stax.logger import (
     BaseLogger,
+    TextLogger,
     WandBLogger,
 )
 from stax.model_module import (
@@ -43,6 +44,7 @@ __all__ = [
     "init_distributed_jax",
     # logger
     "BaseLogger",
+    "TextLogger",
     "WandBLogger",
     # sharding
     "setup_mesh",
