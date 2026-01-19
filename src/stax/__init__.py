@@ -4,11 +4,6 @@ from stax.checkpointer import (
 from stax.fn import (
     get_steps_fn,
 )
-from stax.logger import (
-    BaseLogger,
-    TextLogger,
-    WandBLogger,
-)
 from stax.model_module import (
     HFModelBase,
     modelBase,
@@ -28,6 +23,11 @@ from stax.utils import (
     reshape_batch_key,
     reshape_key_into_array,
 )
+from stax.writer import (
+    BaseMetricWriter,
+    TextWriter,
+    WandBWriter,
+)
 
 __all__ = [
     # checkpointer
@@ -42,10 +42,10 @@ __all__ = [
     "estimate_compile_stats",
     "reshape_batch_key",
     "init_distributed_jax",
-    # logger
-    "BaseLogger",
-    "TextLogger",
-    "WandBLogger",
+    # writer
+    "BaseMetricWriter",
+    "TextWriter",
+    "WandBWriter",
     # sharding
     "setup_mesh",
     "get_sharding",
