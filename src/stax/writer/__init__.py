@@ -1,4 +1,4 @@
-from stax.logger.main import (
+from stax.writer.main import (
     BaseLogger,
     TextLogger,
     WandBLogger,
