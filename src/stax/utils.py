@@ -204,9 +204,9 @@ def init_distributed_jax():
     logger.info("Initializing JAX distributed environment...")
     RANK = os.environ.get("RANK", None)
     if not RANK:
-        logger.warning("JAX distributed got no RANK env variable")
-    else:
-        logger.info(f"JAX distributed RANK env variable: {RANK}")
+        raise ValueError("JAX distributed got no RANK env variable")
+
+    jax.distributed.initialize(process_id=int(RANK))
 
     # because we don't provide all arugments
     # we cannot set the rank through the initalize call
