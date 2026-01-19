@@ -202,15 +202,13 @@ def get_perf_func(trace_path, func: JitWrapped, *args, **kwargs) -> None:
 
 def init_distributed_jax():
     """Initializes JAX distributed environment."""
-    if RANK := os.environ.get("RANK", None) is None:
+    if os.environ.get("RANK", None) is None:
         raise ValueError("JAX distributed got no RANK env variable")
     if jax.distributed.is_initialized():
         logger.warning("JAX distributed is already initialized")
         return
 
-    RANK = int(RANK)
-
-    jax.distributed.initialize(process_id=RANK)
+    jax.distributed.initialize()
 
     process_count = jax.process_count()
     local_devices = len(jax.local_devices())
@@ -220,3 +218,4 @@ def init_distributed_jax():
     for dev in all_devices:
         logger.info(f"\tDevice ID: {dev.id}, Platform: {dev.platform}, Kind: {dev.device_kind}")
     sync_global_devices("init_distributed_jax")
+    return
