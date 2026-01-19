@@ -1,22 +1,29 @@
 import abc
 import itertools as it
 import os
+from dataclasses import dataclass
 from typing import Any, Mapping, Optional
 
 import jax
 import wandb
-from chex import dataclass
 from jax.experimental.multihost_utils import sync_global_devices
 from jaxtyping import PyTree
-from loguru import logger
 
+from stax.logger import staxLogger as logger
 from stax.utils import convert_to_scalar
 
 
 @dataclass
 class Metric:
     step: int
-    data: PyTree
+    data: dict[str, Any]
+
+
+"""
+Writer classes for logging metrics during training and evaluation.
+They are designed to work in multi-host environments, ensuring that only the primary host
+performs actual logging to avoid duplication.
+"""
 
 
 class BaseMetricWriter(abc.ABC):

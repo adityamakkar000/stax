@@ -10,7 +10,8 @@ from jax._src.pjit import JitWrapped
 from jax.experimental.multihost_utils import sync_global_devices
 from jax.stages import Compiled
 from jaxtyping import PRNGKeyArray
-from loguru import logger
+
+from stax.logger import staxLogger as logger
 
 
 class Tracker:
@@ -201,26 +202,21 @@ def get_perf_func(trace_path, func: JitWrapped, *args, **kwargs) -> None:
 
 def init_distributed_jax():
     """Initializes JAX distributed environment."""
-    logger.info("Initializing JAX distributed environment...")
-    RANK = os.environ.get("RANK", None)
-    if not RANK:
+    if RANK := os.environ.get("RANK", None) is None:
         raise ValueError("JAX distributed got no RANK env variable")
+    if jax.distributed.is_initialized():
+        logger.warning("JAX distributed is already initialized")
+        return
 
-    jax.distributed.initialize(process_id=int(RANK))
+    RANK = int(RANK)
 
-    # because we don't provide all arugments
-    # we cannot set the rank through the initalize call
-    jax.distributed.initialize()
-    RANK = int(RANK) if RANK else jax.process_index()
+    jax.distributed.initialize(process_id=RANK)
 
-    if RANK == 0:
-        process_count = jax.process_count()
-        local_devices = len(jax.local_devices())
-        logger.info(f"JAX distributed initialized with {process_count} processes with {local_devices} per host.")
-        logger.info(f"JAX process index: {jax.process_index()}")
-        all_devices = jax.devices()
-        logger.info("Devices:")
-        for dev in all_devices:
-            logger.info(f"\tDevice ID: {dev.id}, Platform: {dev.platform}, Kind: {dev.device_kind}")
-    sync_global_devices("init")
-    return
+    process_count = jax.process_count()
+    local_devices = len(jax.local_devices())
+    logger.info(f"JAX distributed initialized with {process_count} processes with {local_devices} per host.")
+    all_devices = jax.devices()
+    logger.info("Devices:")
+    for dev in all_devices:
+        logger.info(f"\tDevice ID: {dev.id}, Platform: {dev.platform}, Kind: {dev.device_kind}")
+    sync_global_devices("init_distributed_jax")

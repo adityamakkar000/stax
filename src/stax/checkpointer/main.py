@@ -3,7 +3,8 @@ from typing import Any, Optional
 import jax
 import orbax.checkpoint as ocp
 from jaxtyping import PyTree
-from loguru import logger
+
+from stax.logger import staxLogger as logger
 
 
 def to_abstract(x: Any) -> jax.ShapeDtypeStruct | int | float:
