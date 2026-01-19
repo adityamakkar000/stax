@@ -1,11 +1,11 @@
 from stax.writer.main import (
-    BaseLogger,
-    TextLogger,
-    WandBLogger,
+    BaseMetricWriter,
+    TextWriter,
+    WandBWriter,
 )
 
 __all__ = [
-    "BaseLogger",
-    "TextLogger",
-    "WandBLogger",
+    "BaseMetricWriter",
+    "TextWriter",
+    "WandBWriter",
 ]

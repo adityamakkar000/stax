@@ -20,7 +20,7 @@ class Metric:
 
 
 class BaseMetricWriter(abc.ABC):
-    """Base writer that only logs from the primary host in multihost environments."""
+    """Base writer that only writes from the primary host in multihost environments."""
 
     def __init__(self, metrics_to_print: list[str] = ["loss"]):
         """Initialize the metric writer.
@@ -41,7 +41,7 @@ class BaseMetricWriter(abc.ABC):
         sync_global_devices("writer_setup")
 
     def __call__(self, step: int, data: PyTree):
-        """Log metrics. Only primary host performs actual logging.
+        """Write metrics. Only primary host performs actual writing.
 
         Args:
             step: Training step number.
@@ -49,20 +49,20 @@ class BaseMetricWriter(abc.ABC):
         """
         if self.is_primary_host:
             cur_metrics = Metric(step, data)
-            self.prev_metric, metric_to_log = cur_metrics, self.prev_metric
+            self.prev_metric, metric_to_write = cur_metrics, self.prev_metric
 
-            if metric_to_log is None:
+            if metric_to_write is None:
                 return
 
-            self._async_write_metrics(metric_to_log)
-            self._log(metric_to_log)
-        sync_global_devices("log")
+            self._async_write_metrics(metric_to_write)
+            self._log(metric_to_write)
+        sync_global_devices("writer_sync")
 
     def _log(self, metric: Metric):
         """Print formatted metrics to console.
 
         Args:
-            metric: Metric object containing step and data to log.
+            metric: Metric object containing step and data to write to stdout.
         """
 
         step = metric.step
@@ -75,7 +75,7 @@ class BaseMetricWriter(abc.ABC):
         logger.info(fmt_str)
 
     def finish(self):
-        """Finish logging. Only primary host performs cleanup."""
+        """Finish writing. Only primary host performs cleanup."""
         if self.is_primary_host:
             self._finish()
         sync_global_devices("writer_finish")
@@ -104,15 +104,15 @@ class BaseMetricWriter(abc.ABC):
 
     @abc.abstractmethod
     def _setup_writer(self):
-        """Initialize the logger. Called only on primary host."""
+        """Initialize the writer. Called only on primary host."""
         raise NotImplementedError
 
     @abc.abstractmethod
     def _async_write_metrics(self, metric: Metric):
-        """Asynchronously log metrics. Called only on primary host.
+        """Asynchronously write metrics. Called only on primary host.
 
         Args:
-            metric: Metric object to log.
+            metric: Metric object to write.
         """
         raise NotImplementedError
 
@@ -131,17 +131,17 @@ class BaseMetricWriter(abc.ABC):
         raise NotImplementedError
 
 
-class TextLogger(BaseMetricWriter):
+class TextWriter(BaseMetricWriter):
     """Simple text-based logger that only prints to console."""
 
-    def _setup_logger(self): ...
+    def _setup_writer(self): ...
     def _async_write_metrics(self, metric: Metric): ...
     def _finish(self) -> None: ...
     def _id(self) -> Optional[str]:
         return None
 
 
-class WandBLogger(BaseMetricWriter):
+class WandBWriter(BaseMetricWriter):
     """Weights & Biases logger for experiment tracking."""
 
     def __init__(
@@ -152,7 +152,7 @@ class WandBLogger(BaseMetricWriter):
         run_id: Optional[str] = None,
         **init_kwargs,
     ):
-        """Initialize WandB logger.
+        """Initialize WandB writer.
 
         Args:
             entity: WandB entity name.
@@ -194,8 +194,8 @@ class WandBLogger(BaseMetricWriter):
         if self._run is None:
             raise ValueError("run is None")
 
-        step = Metric.step
-        scalar_data = jax.tree.map(convert_to_scalar, Metric.data)
+        step = metric.step
+        scalar_data = jax.tree.map(convert_to_scalar, metric.data)
         self._run.log(scalar_data, step=step)
 
     def _finish(self) -> None:
