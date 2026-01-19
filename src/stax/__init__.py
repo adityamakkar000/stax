@@ -4,6 +4,7 @@ from stax.checkpointer import (
 from stax.fn import (
     get_steps_fn,
 )
+from stax.logger import staxLogger
 from stax.model_module import (
     HFModelBase,
     modelBase,
@@ -46,6 +47,8 @@ __all__ = [
     "BaseMetricWriter",
     "TextWriter",
     "WandBWriter",
+    # logger
+    "staxLogger",
     # sharding
     "setup_mesh",
     "get_sharding",

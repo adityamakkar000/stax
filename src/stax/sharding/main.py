@@ -8,8 +8,8 @@ import numpy as np
 from jax.sharding import Mesh, NamedSharding, SingleDeviceSharding
 from jax.sharding import PartitionSpec as P
 from jaxtyping import Array, PyTree
-from loguru import logger
 
+from stax.logger import staxLogger as logger
 from stax.utils import is_key
 
 """

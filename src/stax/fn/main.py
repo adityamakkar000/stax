@@ -8,8 +8,8 @@ import optax
 from flax import linen as nn
 from jax.sharding import NamedSharding
 from jaxtyping import Array, PyTree
-from loguru import logger
 
+from stax.logger import staxLogger as logger
 from stax.sharding import ShardingConfig, ShardingType, get_sharding, setup_mesh
 
 Params = PyTree
@@ -35,7 +35,7 @@ def process_aux(out: Union[Array, Tuple[Array, PyTree]], has_aux: bool = True) -
         A dictionary of metrics. If no aux data, returns {'loss': out}.
     """
     if has_aux:
-        _, metrics = out  # type: ignore
+        _, metrics = out
     else:
         metrics = {"loss": out}
     return metrics  # type: ignore
