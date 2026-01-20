@@ -165,6 +165,7 @@ class Checkpointer:
                 metadata=ocp.args.JsonRestore(),
             ),
         )
+        assert hasattr(tree, "state") and hasattr(tree, "metadata"), "Restored tree missing required fields."
 
         return {"state": tree.state, "metadata": tree.metadata}
 
