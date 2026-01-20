@@ -141,6 +141,9 @@ class BaseMetricWriter(abc.ABC):
 class TextWriter(BaseMetricWriter):
     """Simple text-based logger that only prints to console."""
 
+    def __init__(self, *init_args, **init_kwargs):
+        super().__init__(*init_args, **init_kwargs)
+
     def _setup_writer(self): ...
     def _async_write_metrics(self, metric: Metric): ...
     def _finish(self) -> None: ...
