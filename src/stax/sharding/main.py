@@ -20,7 +20,7 @@ TODO:
 """
 
 
-class ShardingType(enum.Enum):
+class ShardingType(enum.StrEnum):
     SINGLE = "single"
     DP = "dp"
     FSDP = "fsdp"
