@@ -1,6 +1,7 @@
 import abc
 from typing import Optional, Union
 
+import jax
 from jax.sharding import Sharding
 from jaxtyping import Array, PyTree
 from optax import GradientTransformation
@@ -45,6 +46,17 @@ class modelBase(abc.ABC):
         """
         raise NotImplementedError("This function hasn't been implemented yet")
 
+    def count_params(self, params: PyTree) -> int:
+        """
+        Calculate the total number of parameters in the model.
+        Args:
+            params (PyTree): The model parameters.
+        Returns:
+            int: Total number of parameters.
+        """
+
+        return jax.tree.reduce(lambda acc, p: acc + p.size, params, 0)
+
 
 class HFModelBase(modelBase):
     """
@@ -53,7 +65,7 @@ class HFModelBase(modelBase):
     """
 
     @abc.abstractmethod
-    def load_from_hf(self, model_name: str) -> PyTree:
+    def load_from_hf(self, params: PyTree, model_name: str) -> PyTree:
         """
         Load model weights from Hugging Face.
         Args:
