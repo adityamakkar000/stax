@@ -79,7 +79,7 @@ def val_step(
     step_fn: SingleStepFn,
     params: Params,
     batch: Batch,
-    eval_steps: int = 1,
+    val_steps: int = 1,
     has_aux: bool = True,
 ) -> Metrics:
     """
@@ -106,7 +106,7 @@ def val_step(
         val_fn,
         None,  # start carry with None
         batch,
-        length=eval_steps,
+        length=val_steps,
     )
     metrics = jax.tree.map(lambda x: x.mean(axis=0), metrics)
 
@@ -119,7 +119,7 @@ def get_steps_fn(
     tx: optax.GradientTransformation,
     has_aux: bool = True,
     grad_steps: int = 1,
-    eval_steps: int = 1,
+    val_steps: int = 1,
     sharding: ShardingConfig = ShardingConfig(),
     devices: Optional[np.ndarray] = None,
     **jit_kwargs,
@@ -133,7 +133,7 @@ def get_steps_fn(
         tx: The Optax optimizer.
         has_aux: Whether the step function returns auxiliary metrics.
         grad_steps: Number of gradient accumulation steps.
-        eval_steps: Number of evaluation steps per batch.
+        val_steps: Number of validation steps per batch.
         sharding: The type of sharding strategy to use (e.g., from SHARDING_TYPES).
         devices: Array of devices to use for sharding mesh.
         **jit_kwargs: Additional keyword arguments to pass to jax.jit.
@@ -187,7 +187,7 @@ def get_steps_fn(
                 single_step,
                 params,
                 shard_data(batch),
-                eval_steps=eval_steps,
+                val_steps=val_steps,
                 has_aux=has_aux,
             )
             val_metrics = {f"val_{k}": v for k, v in val_metrics.items()}
