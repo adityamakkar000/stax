@@ -10,7 +10,7 @@ from jaxtyping import Array, PyTree
 
 from stax.logger import staxLogger as logger
 from stax.model_module import modelBase
-from stax.sharding import ShardingConfig, Shardings, ShardingType, get_sharding, setup_mesh
+from stax.sharding import ShardingConfig, ShardingType, get_sharding, setup_mesh
 
 Params = PyTree
 Batch = PyTree
@@ -149,7 +149,7 @@ def get_steps_fn(
     sharding: ShardingConfig = ShardingConfig(),
     devices: Optional[np.ndarray] = None,
     **jit_kwargs,
-) -> Tuple[Callable[[Params, OptState, Batch], PyTree], Callable[[Params, Batch], Metrics], Shardings]:
+):
     """
     Creates JIT-compiled training and validation functions, optionally with sharding.
 
