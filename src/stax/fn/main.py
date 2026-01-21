@@ -10,7 +10,7 @@ from jaxtyping import Array, PyTree
 
 from stax.logger import staxLogger as logger
 from stax.model_module import modelBase
-from stax.sharding import ShardingConfig, ShardingType, get_sharding, setup_mesh
+from stax.sharding import ShardingConfig, Shardings, ShardingType, get_sharding, setup_mesh
 
 Params = PyTree
 Batch = PyTree
@@ -149,7 +149,7 @@ def get_steps_fn(
     sharding: ShardingConfig = ShardingConfig(),
     devices: Optional[np.ndarray] = None,
     **jit_kwargs,
-):
+) -> Tuple[Callable[[Params, OptState, Batch], PyTree], Callable[[Params, Batch], Metrics], Shardings]:
     """
     Creates JIT-compiled training and validation functions, optionally with sharding.
 
@@ -180,7 +180,7 @@ def get_steps_fn(
 
     mesh = setup_mesh(devices=devices)
     shard_data, shardings = get_sharding(mesh, sharding)
-    out_shardings = {
+    train_shardings= {
         "metrics": shardings.metrics_sharding,
         "params": shardings.param_sharding,
         "opt_state": shardings.opt_state_sharding,
@@ -190,6 +190,7 @@ def get_steps_fn(
     if sharding.opt_state_offload:
         offload_opt_state_sharding = jax.tree.map(lambda x: x.with_memory_kind("device"), shardings.opt_state_sharding)
 
+    @partial(jax.jit, out_shardings=train_shardings, **jit_kwargs)
     def train_fn(params: Params, opt_state: OptState, *batch: Batch) -> Dict[str, Any]:
         """
         Performs a training step, including gradient calculation and parameter updates.
@@ -215,6 +216,7 @@ def get_steps_fn(
                 offload_opt_state=offload_opt_state_sharding,
             )
 
+    @partial(jax.jit, out_shardings=shardings.metrics_sharding, **jit_kwargs)
     def val_fn(params: Params, *batch: Batch) -> Metrics:
         """
         Performs a validation step over multiple micro-batches.
@@ -238,10 +240,5 @@ def get_steps_fn(
             val_metrics = {f"val_{k}": v for k, v in val_metrics.items()}
             return val_metrics
 
-    def compile(fn: Callable, out_shardings: PyTree, **jit_kwargs) -> Callable:
-        return wraps(fn)(jax.jit(fn, out_shardings=out_shardings, **jit_kwargs))
-
-    # train_fn_jit = wraps(train_fn)(jax.jit(train_fn, out_shardings=out_shardings, **jit_kwargs))
-    # val_fn_jit = wraps(val_fn)(jax.jit(val_fn, out_shardings=shardings.metrics_sharding))
 
     return train_fn, val_fn, shardings
