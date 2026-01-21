@@ -1,4 +1,4 @@
-from functools import partial, wraps
+from functools import partial
 from typing import Any, Callable, Dict, Optional, Tuple, Union
 
 import jax
@@ -180,7 +180,7 @@ def get_steps_fn(
 
     mesh = setup_mesh(devices=devices)
     shard_data, shardings = get_sharding(mesh, sharding)
-    train_shardings= {
+    train_shardings = {
         "metrics": shardings.metrics_sharding,
         "params": shardings.param_sharding,
         "opt_state": shardings.opt_state_sharding,
@@ -239,6 +239,5 @@ def get_steps_fn(
             )
             val_metrics = {f"val_{k}": v for k, v in val_metrics.items()}
             return val_metrics
-
 
     return train_fn, val_fn, shardings
