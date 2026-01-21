@@ -1,4 +1,4 @@
-from functools import partial, wraps
+from functools import partial
 from typing import Any, Callable, Dict, Optional, Tuple, Union
 
 import jax
@@ -148,7 +148,7 @@ def get_steps_fn(
     sharding: ShardingConfig = ShardingConfig(),
     devices: Optional[np.ndarray] = None,
     **jit_kwargs,
-) -> Tuple[Callable, Callable, Shardings]:
+) -> Tuple[Callable[[Params, OptState, Batch], PyTree], Callable[[Params, Batch], Metrics], Shardings]:
     """
     Creates JIT-compiled training and validation functions, optionally with sharding.
 
@@ -189,7 +189,6 @@ def get_steps_fn(
     if sharding.opt_state_offload:
         offload_opt_state_sharding = jax.tree.map(lambda x: x.with_memory_kind("device"), shardings.opt_state_sharding)
 
-    @wraps
     @partial(jax.jit, out_shardings=out_shardings, **jit_kwargs)
     def train_fn_jit(params: Params, opt_state: OptState, *batch: Batch) -> Dict[str, Any]:
         logger.info("compiling train step fn ...")
@@ -205,7 +204,6 @@ def get_steps_fn(
                 offload_opt_state=offload_opt_state_sharding,
             )
 
-    @wraps
     @partial(jax.jit, out_shardings=shardings.metrics_sharding)
     def val_fn_jit(params: Params, *batch: Batch) -> Metrics:
         logger.info("compiling val fn ...")
