@@ -1,4 +1,4 @@
-from functools import partial
+from functools import partial, wraps
 from typing import Any, Callable, Dict, Optional, Tuple, Union
 
 import jax
@@ -63,6 +63,7 @@ def train_step(
         batch: The input batch (potentially containing multiple micro-batches).
         grad_steps: Number of gradient accumulation steps (micro-batches).
         has_aux: Whether step_fn returns auxiliary metrics.
+        offload_opt_state: Optional sharding for offloading optimizer state.
 
     Returns:
         A dictionary containing updated 'metrics', 'params', and 'opt_state'.
@@ -161,13 +162,13 @@ def get_steps_fn(
         eval_steps: Number of evaluation steps per batch.
         sharding: The type of sharding strategy to use (e.g., from SHARDING_TYPES).
         devices: Array of devices to use for sharding mesh.
-        data_shard_axis: Axis along which to shard data.
+        **jit_kwargs: Additional keyword arguments to pass to jax.jit.
 
     Returns:
         A tuple containing:
         - train_fn: JIT-compiled training function.
         - val_fn: JIT-compiled validation function.
-        - shardings[params_sharding, opt_state_sharding, metric_sharding]: Sharding specifications for params, optimizer state and metricsk
+        - shardings: Sharding specifications for params, optimizer state and metrics.
     """
     single_step = partial(step_fn, model)
 
@@ -189,18 +190,18 @@ def get_steps_fn(
     if sharding.opt_state_offload:
         offload_opt_state_sharding = jax.tree.map(lambda x: x.with_memory_kind("device"), shardings.opt_state_sharding)
 
-    @partial(jax.jit, out_shardings=out_shardings, **jit_kwargs)
-    def train_fn_jit(params: Params, opt_state: OptState, *batch: Batch) -> Dict[str, Any]:
+    def train_fn(params: Params, opt_state: OptState, *batch: Batch) -> Dict[str, Any]:
         """
         Performs a training step, including gradient calculation and parameter updates.
+
         Args:
             params: Current model parameters.
             opt_state: Current optimizer state.
-            batch: The input batch (potentially containing multiple micro-batches).
+            *batch: The input batch
+
         Returns:
             A dictionary containing updated 'metrics', 'params', and 'opt_state'.
         """
-
         logger.info("compiling train step fn ...")
         with jax.named_scope("train_step"):
             return train_step(
@@ -214,16 +215,16 @@ def get_steps_fn(
                 offload_opt_state=offload_opt_state_sharding,
             )
 
-    @partial(jax.jit, out_shardings=shardings.metrics_sharding)
-    def val_fn_jit(params: Params, *batch: Batch) -> Metrics:
+    def val_fn(params: Params, *batch: Batch) -> Metrics:
         """
         Performs a validation step over multiple micro-batches.
+
         Args:
             params: Current model parameters.
-            batch: The input batch (potentially containing multiple micro-batches).
-        Returns:
-            A dictionary of averaged metrics.
+            *batch: The input batch
 
+        Returns:
+            A dictionary of averaged metrics with 'val_' prefix.
         """
         logger.info("compiling val fn ...")
         with jax.named_scope("val_step"):
@@ -236,5 +237,11 @@ def get_steps_fn(
             )
             val_metrics = {f"val_{k}": v for k, v in val_metrics.items()}
             return val_metrics
+
+    def compile(fn: Callable, out_shardings: PyTree, **jit_kwargs) -> Callable:
+        return wraps(fn)(jax.jit(fn, out_shardings=out_shardings, **jit_kwargs))
+
+    train_fn_jit = wraps(train_fn)(jax.jit(train_fn, out_shardings=out_shardings, **jit_kwargs))
+    val_fn_jit = wraps(val_fn)(jax.jit(val_fn, out_shardings=shardings.metrics_sharding))
 
     return train_fn_jit, val_fn_jit, shardings
