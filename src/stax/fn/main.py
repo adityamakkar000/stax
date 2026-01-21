@@ -168,7 +168,7 @@ def get_steps_fn(
     def train_fn(params: Params, opt_state: OptState, *batch: Batch) -> Dict[str, Any]:
         logger.info("compiling train step fn ...")
         with jax.named_scope("train_step"):
-            return train_step(
+            out = train_step(
                 single_step,
                 tx,
                 params,
@@ -178,6 +178,8 @@ def get_steps_fn(
                 has_aux=has_aux,
                 offload_opt_state=offload_opt_state_sharding,
             )
+            out["metrics"] = {f"train/{k}": v for k, v in out["metrics"].items()}
+            return out
 
     @partial(jax.jit, out_shardings=shardings.metrics_sharding, **jit_kwargs)
     def val_fn(params: Params, *batch: Batch) -> Metrics:
@@ -190,7 +192,7 @@ def get_steps_fn(
                 val_steps=val_steps,
                 has_aux=has_aux,
             )
-            val_metrics = {f"val_{k}": v for k, v in val_metrics.items()}
+            val_metrics = {f"val/{k}": v for k, v in val_metrics.items()}
             return val_metrics
 
     return train_fn, val_fn, shardings
