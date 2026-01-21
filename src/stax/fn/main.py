@@ -191,6 +191,16 @@ def get_steps_fn(
 
     @partial(jax.jit, out_shardings=out_shardings, **jit_kwargs)
     def train_fn_jit(params: Params, opt_state: OptState, *batch: Batch) -> Dict[str, Any]:
+        """
+        Performs a training step, including gradient calculation and parameter updates.
+        Args:
+            params: Current model parameters.
+            opt_state: Current optimizer state.
+            batch: The input batch (potentially containing multiple micro-batches).
+        Returns:
+            A dictionary containing updated 'metrics', 'params', and 'opt_state'.
+        """
+
         logger.info("compiling train step fn ...")
         with jax.named_scope("train_step"):
             return train_step(
@@ -206,6 +216,15 @@ def get_steps_fn(
 
     @partial(jax.jit, out_shardings=shardings.metrics_sharding)
     def val_fn_jit(params: Params, *batch: Batch) -> Metrics:
+        """
+        Performs a validation step over multiple micro-batches.
+        Args:
+            params: Current model parameters.
+            batch: The input batch (potentially containing multiple micro-batches).
+        Returns:
+            A dictionary of averaged metrics.
+
+        """
         logger.info("compiling val fn ...")
         with jax.named_scope("val_step"):
             val_metrics = val_step(
