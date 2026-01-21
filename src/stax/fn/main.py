@@ -241,7 +241,7 @@ def get_steps_fn(
     def compile(fn: Callable, out_shardings: PyTree, **jit_kwargs) -> Callable:
         return wraps(fn)(jax.jit(fn, out_shardings=out_shardings, **jit_kwargs))
 
-    train_fn_jit = wraps(train_fn)(jax.jit(train_fn, out_shardings=out_shardings, **jit_kwargs))
-    val_fn_jit = wraps(val_fn)(jax.jit(val_fn, out_shardings=shardings.metrics_sharding))
+    # train_fn_jit = wraps(train_fn)(jax.jit(train_fn, out_shardings=out_shardings, **jit_kwargs))
+    # val_fn_jit = wraps(val_fn)(jax.jit(val_fn, out_shardings=shardings.metrics_sharding))
 
-    return train_fn_jit, val_fn_jit, shardings
+    return train_fn, val_fn, shardings
