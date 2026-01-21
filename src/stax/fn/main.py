@@ -1,5 +1,5 @@
 from functools import partial
-from typing import Any, Callable, Dict, Optional, Tuple, Union
+from typing import Any, Callable, Dict, Optional, Protocol, Tuple, Union
 
 import jax
 import jax.numpy as jnp
@@ -21,6 +21,35 @@ Metrics = Dict[str, Array]
 StepFn = Callable[[modelBase, PyTree, tuple[PyTree, ...], bool], Union[Array, Tuple[Array, PyTree]]]
 # SingleStepFn: (params, *batch, train=True/False) -> Union[loss, (loss, aux)]
 SingleStepFn = Callable[[PyTree, tuple[PyTree, ...], bool], Union[Array, Tuple[Array, PyTree]]]
+
+
+class TrainFn(Protocol):
+    def __call__(self, params: Params, opt_state: OptState, *batch: Batch) -> Dict[str, Any]:
+        """
+        Performs a training step, including gradient calculation and parameter updates.
+
+        Args:
+            params (Params): Current model parameters.
+            opt_state (OptState): Current optimizer state.
+            *batch (Batch): The input batch.
+        Returns:
+            Dict[str, Any]: A dictionary containing updated 'metrics', 'params', and 'opt_state'.
+        """
+        ...
+
+
+class ValFn(Protocol):
+    def __call__(self, params: Params, *batch: Batch) -> Metrics:
+        """
+        Performs a validation step over batches.
+
+        Args:
+            params (Params): Current model parameters.
+            *batch (Batch): The input batch.
+        Returns:
+            Metrics: A dictionary of averaged metrics.
+        """
+        ...
 
 
 def process_aux(out: Union[Array, Tuple[Array, PyTree]], has_aux: bool = True) -> Metrics:
@@ -149,7 +178,7 @@ def get_steps_fn(
     sharding: ShardingConfig = ShardingConfig(),
     devices: Optional[np.ndarray] = None,
     **jit_kwargs,
-) -> Tuple[Callable[[Params, OptState, Batch], PyTree], Callable[[Params, Batch], Metrics], Shardings]:
+) -> Tuple[TrainFn, ValFn, Shardings]:
     """
     Creates JIT-compiled training and validation functions, optionally with sharding.
 
@@ -192,17 +221,6 @@ def get_steps_fn(
 
     @partial(jax.jit, out_shardings=train_shardings, **jit_kwargs)
     def train_fn(params: Params, opt_state: OptState, *batch: Batch) -> Dict[str, Any]:
-        """
-        Performs a training step, including gradient calculation and parameter updates.
-
-        Args:
-            params: Current model parameters.
-            opt_state: Current optimizer state.
-            *batch: The input batch
-
-        Returns:
-            A dictionary containing updated 'metrics', 'params', and 'opt_state'.
-        """
         logger.info("compiling train step fn ...")
         with jax.named_scope("train_step"):
             return train_step(
@@ -218,16 +236,6 @@ def get_steps_fn(
 
     @partial(jax.jit, out_shardings=shardings.metrics_sharding, **jit_kwargs)
     def val_fn(params: Params, *batch: Batch) -> Metrics:
-        """
-        Performs a validation step over multiple micro-batches.
-
-        Args:
-            params: Current model parameters.
-            *batch: The input batch
-
-        Returns:
-            A dictionary of averaged metrics with 'val_' prefix.
-        """
         logger.info("compiling val fn ...")
         with jax.named_scope("val_step"):
             val_metrics = val_step(
