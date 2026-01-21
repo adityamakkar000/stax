@@ -5,11 +5,11 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import optax
-from flax import linen as nn
 from jax.sharding import NamedSharding
 from jaxtyping import Array, PyTree
 
 from stax.logger import staxLogger as logger
+from stax.model_module import modelBase
 from stax.sharding import ShardingConfig, ShardingType, get_sharding, setup_mesh
 
 Params = PyTree
@@ -18,7 +18,7 @@ OptState = PyTree
 Metrics = Dict[str, Array]
 
 # StepFn: (model, params, *batch, train=True/False) -> Union[loss, (loss, aux)]
-StepFn = Callable[[nn.Module, PyTree, tuple[PyTree, ...], bool], Union[Array, Tuple[Array, PyTree]]]
+StepFn = Callable[[modelBase, PyTree, tuple[PyTree, ...], bool], Union[Array, Tuple[Array, PyTree]]]
 # SingleStepFn: (params, *batch, train=True/False) -> Union[loss, (loss, aux)]
 SingleStepFn = Callable[[PyTree, tuple[PyTree, ...], bool], Union[Array, Tuple[Array, PyTree]]]
 
@@ -140,7 +140,7 @@ def val_step(
 
 def get_steps_fn(
     step_fn: StepFn,
-    model: nn.Module,
+    model: modelBase,
     tx: optax.GradientTransformation,
     has_aux: bool = True,
     grad_steps: int = 1,
@@ -154,7 +154,7 @@ def get_steps_fn(
 
     Args:
         step_fn: The step function taking (model, params, *batch, train).
-        model: The Flax model instance.
+        model: The modelBase instance.
         tx: The Optax optimizer.
         has_aux: Whether the step function returns auxiliary metrics.
         grad_steps: Number of gradient accumulation steps.
