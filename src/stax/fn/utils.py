@@ -24,32 +24,32 @@ SingleStepFn = Callable[[PyTree, tuple[PyTree, ...], bool], Union[Array, Tuple[A
 
 
 class TrainFn(Protocol):
-    """
-    Performs a training step, including gradient calculation and parameter updates.
+    def __call__(self, params: Params, opt_state: OptState, *batch: Batch) -> Dict[str, Any]:
+        """
+        Performs a training step, including gradient calculation and parameter updates.
 
-    Args:
-        params (Params): Current model parameters.
-        opt_state (OptState): Current optimizer state.
-        *batch (Batch): The input batch.
-    Returns:
-        Dict[str, Any]: A dictionary containing updated 'metrics', 'params', and 'opt_state'.
-    """
-
-    def __call__(self, params: Params, opt_state: OptState, *batch: Batch) -> Dict[str, Any]: ...
+        Args:
+            params (Params): Current model parameters.
+            opt_state (OptState): Current optimizer state.
+            *batch (Batch): The input batch.
+        Returns:
+            Dict[str, Any]: A dictionary containing updated 'metrics', 'params', and 'opt_state'.
+        """
+        ...
 
 
 class ValFn(Protocol):
-    """
-    Performs a validation step over batches.
+    def __call__(self, params: Params, *batch: Batch) -> Metrics:
+        """
+        Performs a validation step over batches.
 
-    Args:
-        params (Params): Current model parameters.
-        *batch (Batch): The input batch.
-    Returns:
-        Metrics: A dictionary of averaged metrics.
-    """
-
-    def __call__(self, params: Params, *batch: Batch) -> Metrics: ...
+        Args:
+            params (Params): Current model parameters.
+            *batch (Batch): The input batch.
+        Returns:
+            Metrics: A dictionary of averaged metrics.
+        """
+        ...
 
 
 def process_aux(out: Union[Array, Tuple[Array, PyTree]], has_aux: bool = True) -> Metrics:
