@@ -48,6 +48,13 @@ class ShardingConfig:
             )
 
 
+@dataclass
+class Shardings:
+    param_sharding: PyTree[NamedSharding]
+    opt_state_sharding: PyTree[NamedSharding]
+    metrics_sharding: NamedSharding
+
+
 def setup_mesh(devices: np.ndarray | None = None):
     if not jax.distributed.is_initialized():
         raise ValueError("jax distributed has not been initialized")
@@ -67,9 +74,7 @@ def setup_mesh(devices: np.ndarray | None = None):
     return mesh
 
 
-def get_sharding(
-    mesh: Mesh, config: ShardingConfig
-) -> tuple[Callable[[PyTree], PyTree], tuple[PyTree, PyTree, PyTree]]:
+def get_sharding(mesh: Mesh, config: ShardingConfig) -> tuple[Callable[[PyTree], PyTree], Shardings]:
     """Adapted from https://github.com/kvfrans/jaxtransformer"""
     assert len(mesh.axis_names) == 1, "dp mesh should only have one mesh"
 
@@ -117,4 +122,4 @@ def get_sharding(
     if config.opt_state_offload:
         opt_state_sharding = jax.tree.map(lambda x: x.with_memory_kind("pinned_host"), opt_state_sharding)
 
-    return shard_data, (param_sharding, opt_state_sharding, metrics_sharding)
+    return shard_data, Shardings(param_sharding, opt_state_sharding, metrics_sharding)

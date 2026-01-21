@@ -10,7 +10,7 @@ from jaxtyping import Array, PyTree
 
 from stax.logger import staxLogger as logger
 from stax.model_module import modelBase
-from stax.sharding import ShardingConfig, ShardingType, get_sharding, setup_mesh
+from stax.sharding import ShardingConfig, Shardings, ShardingType, get_sharding, setup_mesh
 
 Params = PyTree
 Batch = PyTree
@@ -148,7 +148,7 @@ def get_steps_fn(
     sharding: ShardingConfig = ShardingConfig(),
     devices: Optional[np.ndarray] = None,
     **jit_kwargs,
-) -> Tuple[Callable, Callable, Tuple[Any, Any]]:
+) -> Tuple[Callable, Callable, Shardings]:
     """
     Creates JIT-compiled training and validation functions, optionally with sharding.
 
@@ -167,7 +167,7 @@ def get_steps_fn(
         A tuple containing:
         - train_fn: JIT-compiled training function.
         - val_fn: JIT-compiled validation function.
-        - (param_sharding, opt_state_sharding): Sharding specifications for params and optimizer state.
+        - shardings[params_sharding, opt_state_sharding, metric_sharding]: Sharding specifications for params, optimizer state and metricsk
     """
     single_step = partial(step_fn, model)
 
@@ -178,16 +178,16 @@ def get_steps_fn(
             raise ValueError(f"expected single device got {devices=}")
 
     mesh = setup_mesh(devices=devices)
-    shard_data, (param_sharding, opt_state_sharding, metrics_sharding) = get_sharding(mesh, sharding)
+    shard_data, shardings = get_sharding(mesh, sharding)
     out_shardings = {
-        "metrics": metrics_sharding,
-        "params": param_sharding,
-        "opt_state": opt_state_sharding,
+        "metrics": shardings.metrics_sharding,
+        "params": shardings.param_sharding,
+        "opt_state": shardings.opt_state_sharding,
     }
 
     offload_opt_state_sharding = None
     if sharding.opt_state_offload:
-        offload_opt_state_sharding = jax.tree.map(lambda x: x.with_memory_kind("device"), opt_state_sharding)
+        offload_opt_state_sharding = jax.tree.map(lambda x: x.with_memory_kind("device"), shardings.opt_state_sharding)
 
     @wraps
     @partial(jax.jit, out_shardings=out_shardings, **jit_kwargs)
@@ -206,7 +206,7 @@ def get_steps_fn(
             )
 
     @wraps
-    @partial(jax.jit, out_shardings=metrics_sharding)
+    @partial(jax.jit, out_shardings=shardings.metrics_sharding)
     def val_fn_jit(params: Params, *batch: Batch) -> Metrics:
         logger.info("compiling val fn ...")
         with jax.named_scope("val_step"):
@@ -220,4 +220,4 @@ def get_steps_fn(
             val_metrics = {f"val_{k}": v for k, v in val_metrics.items()}
             return val_metrics
 
-    return train_fn_jit, val_fn_jit, (param_sharding, opt_state_sharding)
+    return train_fn_jit, val_fn_jit, shardings

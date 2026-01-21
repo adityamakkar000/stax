@@ -11,6 +11,7 @@ from stax.model_module import (
 )
 from stax.sharding import (
     ShardingConfig,
+    Shardings,
     ShardingType,
     get_sharding,
     setup_mesh,
@@ -54,6 +55,7 @@ __all__ = [
     "get_sharding",
     "ShardingConfig",
     "ShardingType",
+    "Shardings",
     # model_module
     "HFModelBase",
     "modelBase",
