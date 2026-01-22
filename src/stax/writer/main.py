@@ -98,7 +98,7 @@ class BaseMetricWriter(abc.ABC):
         _id = None
         if self.is_primary_host:
             _id = self._id()
-        sync_global_devices("get_id")
+        sync_global_devices("id")
         return _id
 
     @property
