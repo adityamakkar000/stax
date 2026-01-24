@@ -45,7 +45,10 @@ class BaseMetricWriter(abc.ABC):
             if self._run is None:
                 logger.warning("no writer is set")
 
-        logger.info("Setup metric writer with id: %s", self.id if self.id is not None else "n/a")
+        current_id = self.id
+        if current_id is None:
+            current_id = "n/a"
+        logger.info("Setup metric writer with id: %s", current_id)
         sync_global_devices("writer_setup")
 
     def __call__(self, step: int, data: PyTree):
