@@ -45,6 +45,7 @@ class BaseMetricWriter(abc.ABC):
             if self._run is None:
                 logger.warning("no writer is set")
 
+        logger.info("Setup metric writer with id: %s", self.id if self.id is not None else "n/a")
         sync_global_devices("writer_setup")
 
     def __call__(self, step: int, data: PyTree):
@@ -194,7 +195,6 @@ class WandBWriter(BaseMetricWriter):
             init_args["config"] = self.config
 
         self._run = wandb.init(**init_args)  # type: ignore
-        logger.info(f"Initialized WandB Logger with run id: {self.id}")
 
     def _async_write_metrics(self, metric: Metric):
         """Log metrics to WandB.
