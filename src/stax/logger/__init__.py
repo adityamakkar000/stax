@@ -1,6 +1,8 @@
+import os
+
 from loguru import logger
 
-from stax.utils import get_rank
+RANK = int(r) if (r := os.environ.get("RANK", None) is not None) else r
 
 
 class FakeLogger:
@@ -11,6 +13,6 @@ class FakeLogger:
     def critical(self, msg, *args, **kwargs): ...
 
 
-staxLogger = logger if (get_rank() == 0) else FakeLogger()
+staxLogger = logger if (RANK == 0) else FakeLogger()
 
 __all__ = ["staxLogger"]
