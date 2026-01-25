@@ -4,6 +4,7 @@ import jax
 import orbax.checkpoint as ocp
 from jaxtyping import PyTree
 
+import stax
 from stax.logger import staxLogger as logger
 
 
@@ -59,7 +60,8 @@ class Checkpointer:
         # latest checkpointer
         self.checkpoint_dir = output_dir
         self.options = ocp.CheckpointManagerOptions(
-            max_to_keep=max_to_keep, multiprocessing_options=ocp.options.MultiprocessingOptions()
+            max_to_keep=max_to_keep,
+            multiprocessing_options=ocp.options.MultiprocessingOptions(primary_host=stax.utils.get_primary_host()),
         )
         self.checkpoint_manager = ocp.CheckpointManager(self.checkpoint_dir, options=self.options)
 
