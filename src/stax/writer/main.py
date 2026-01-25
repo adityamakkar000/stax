@@ -191,7 +191,7 @@ class WandBWriter(BaseMetricWriter):
             init_args["id"] = self.run_id
             logger.info(f"Resuming WandB run with id: {self.run_id}")
         else:
-            init_args["id"] = random.randint(1, 1_000_000)
+            init_args["id"] = str(random.randint(1, 1_000_000))
             init_args["config"] = self.config
             logger.info(f"Starting a new WandB run with id: {init_args['id']}")
 
