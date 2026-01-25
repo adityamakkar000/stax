@@ -1,12 +1,13 @@
 import abc
 import itertools as it
 import os
+import random
 from dataclasses import dataclass
 from typing import Any, Mapping, Optional
 
 import jax
 import wandb
-from jax.experimental.multihost_utils import sync_global_devices
+from jax.experimental.multihost_utils import broadcast_one_to_all, sync_global_devices
 from jaxtyping import PyTree
 
 from stax.logger import staxLogger as logger
@@ -90,17 +91,14 @@ class BaseMetricWriter(abc.ABC):
         sync_global_devices("writer_finish")
 
     @property
-    def id(self) -> Optional[str]:
+    def id(self) -> str:
         """Get logger ID. Returns None on non-primary hosts.
 
         Returns:
             Logger/run ID or None if not on primary host.
         """
-        _id = None
-        if self.is_primary_host:
-            _id = self._id()
-        sync_global_devices("get_id")
-        return _id
+        _id = broadcast_one_to_all(self._id(), is_source=self.is_primary_host).item()
+        return str(_id)
 
     @property
     def is_primary_host(self) -> bool:
@@ -131,7 +129,7 @@ class BaseMetricWriter(abc.ABC):
         raise NotImplementedError
 
     @abc.abstractmethod
-    def _id(self) -> Optional[str]:
+    def _id(self) -> int:
         """Return logger ID. Called only on primary host.
 
         Returns:
@@ -149,8 +147,8 @@ class TextWriter(BaseMetricWriter):
     def _setup_writer(self): ...
     def _async_write_metrics(self, metric: Metric): ...
     def _finish(self) -> None: ...
-    def _id(self) -> Optional[str]:
-        return None
+    def _id(self) -> int:
+        return -1
 
 
 class WandBWriter(BaseMetricWriter):
@@ -191,8 +189,11 @@ class WandBWriter(BaseMetricWriter):
 
         if self.run_id is not None:
             init_args["id"] = self.run_id
+            logger.info(f"Resuming WandB run with id: {self.run_id}")
         else:
+            init_args["id"] = random.randint(1, 1_000_000)
             init_args["config"] = self.config
+            logger.info(f"Starting a new WandB run with id: {init_args['id']}")
 
         self._run = wandb.init(**init_args)  # type: ignore
 
@@ -214,10 +215,10 @@ class WandBWriter(BaseMetricWriter):
         if self._run is not None:
             self._run.finish()
 
-    def _id(self) -> Optional[str]:
+    def _id(self) -> int:
         """Return WandB run ID.
 
         Returns:
-            WandB run ID or None if run not initialized.
+            WandB run ID or -1 if run not initialized.
         """
-        return self._run.id if self._run is not None else None
+        return int(self._run.id) if self._run is not None else -1
