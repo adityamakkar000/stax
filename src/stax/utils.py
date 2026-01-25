@@ -199,6 +199,13 @@ def get_perf_func(trace_path, func: JitWrapped, *args, **kwargs) -> None:
     logger.info(report)
 
 
+def get_primary_host() -> int:
+    """Returns the primary host index based on RANK environment variable."""
+    if os.environ.get("RANK", None) is None:
+        raise ValueError("JAX distributed got no RANK env variable")
+    return multihost_utils.broadcast_one_to_all(jax.process_index(), is_source=(int(os.environ["RANK"]) == 0)).item()
+
+
 def init_distributed_jax():
     """Initializes JAX distributed environment."""
     if os.environ.get("RANK", None) is None:
@@ -219,10 +226,3 @@ def init_distributed_jax():
         logger.info(f"\tDevice ID: {dev.id}, Platform: {dev.platform}, Kind: {dev.device_kind}")
     multihost_utils.sync_global_devices("init_distributed_jax")
     return
-
-
-def get_primary_host() -> int:
-    """Returns the primary host index based on RANK environment variable."""
-    if os.environ.get("RANK", None) is None:
-        raise ValueError("JAX distributed got no RANK env variable")
-    return multihost_utils.broadcast_one_to_all(jax.process_index(), is_source=(int(os.environ["RANK"]) == 0))
