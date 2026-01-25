@@ -20,6 +20,7 @@ from stax.utils import (
     Tracker,
     estimate_compile_stats,
     get_perf_func,
+    get_primary_host,
     init_distributed_jax,
     is_key,
     reshape_batch_key,
@@ -44,6 +45,7 @@ __all__ = [
     "estimate_compile_stats",
     "reshape_batch_key",
     "init_distributed_jax",
+    "get_primary_host",
     # writer
     "BaseMetricWriter",
     "TextWriter",
