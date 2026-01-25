@@ -4,10 +4,10 @@ from types import TracebackType
 from typing import Any, Optional, Type
 
 import jax
+import jax.experimental.multihost_utils as multihost_utils
 import jax.numpy as jnp
 from jax import Array
 from jax._src.pjit import JitWrapped
-from jax.experimental.multihost_utils import sync_global_devices
 from jax.stages import Compiled
 from jaxtyping import PRNGKeyArray
 
@@ -207,7 +207,7 @@ def init_distributed_jax():
         logger.warning("JAX distributed is already initialized")
         return
 
-    jax.distributed.initialize(process_id=int(os.environ["RANK"]))
+    jax.distributed.initialize()
 
     logger.info(f"Current process RANK: {jax.process_index()}")
     process_count = jax.process_count()
@@ -217,5 +217,12 @@ def init_distributed_jax():
     logger.info("Devices:")
     for dev in all_devices:
         logger.info(f"\tDevice ID: {dev.id}, Platform: {dev.platform}, Kind: {dev.device_kind}")
-    sync_global_devices("init_distributed_jax")
+    multihost_utils.sync_global_devices("init_distributed_jax")
     return
+
+
+def get_primary_host() -> int:
+    """Returns the primary host index based on RANK environment variable."""
+    if os.environ.get("RANK", None) is None:
+        raise ValueError("JAX distributed got no RANK env variable")
+    return multihost_utils.broadcast_one_to_all(jax.process_index(), is_source=(int(os.environ["RANK"]) == 0))
