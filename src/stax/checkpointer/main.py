@@ -58,7 +58,9 @@ class Checkpointer:
 
         # latest checkpointer
         self.checkpoint_dir = output_dir
-        self.options = ocp.CheckpointManagerOptions(max_to_keep=max_to_keep)
+        self.options = ocp.CheckpointManagerOptions(
+            max_to_keep=max_to_keep, multiprocessing_options=ocp.options.MultiprocessingOptions()
+        )
         self.checkpoint_manager = ocp.CheckpointManager(self.checkpoint_dir, options=self.options)
 
         # best checkpointer
