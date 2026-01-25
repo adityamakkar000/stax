@@ -209,7 +209,7 @@ def init_distributed_jax():
 
     jax.distributed.initialize(process_id=int(os.environ["RANK"]))
 
-    logger.info("Current process RANK: %d", jax.process_index())
+    logger.info(f"Current process RANK: {jax.process_index()}")
     process_count = jax.process_count()
     local_devices = len(jax.local_devices())
     logger.info(f"JAX distributed initialized with {process_count} processes with {local_devices} per host.")
