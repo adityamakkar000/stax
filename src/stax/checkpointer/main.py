@@ -156,6 +156,7 @@ class Checkpointer:
         )
 
         step = manager.best_step() if use_best else manager.latest_step()
+        logger.info(f"Restoring {'best' if use_best else 'latest'} checkpoint @ step {step}")
 
         if step is None:
             raise ValueError(f"No checkpoint found in {'best' if use_best else 'latest'} directory.")
@@ -170,6 +171,7 @@ class Checkpointer:
             ),
         )
         assert hasattr(tree, "state") and hasattr(tree, "metadata"), "Restored tree missing required fields."
+        logger.info("Checkpoint restoration complete.")
 
         return {"state": tree.state, "metadata": tree.metadata}
 
