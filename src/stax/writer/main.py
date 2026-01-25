@@ -1,6 +1,5 @@
 import abc
 import itertools as it
-import os
 import random
 from dataclasses import dataclass
 from typing import Any, Mapping, Optional
@@ -11,7 +10,7 @@ from jax.experimental.multihost_utils import broadcast_one_to_all, sync_global_d
 from jaxtyping import PyTree
 
 from stax.logger import staxLogger as logger
-from stax.utils import convert_to_scalar
+from stax.utils import convert_to_scalar, get_rank
 
 
 @dataclass
@@ -107,7 +106,7 @@ class BaseMetricWriter(abc.ABC):
         Returns:
             True if this is the primary host, False otherwise.
         """
-        return os.environ.get("RANK", None) == "0"
+        return get_rank() == 0
 
     @abc.abstractmethod
     def _setup_writer(self):
