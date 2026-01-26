@@ -32,7 +32,6 @@ class modelBase(abc.ABC):
 
         raise NotImplementedError("This function hasn't been implemented yet")
 
-    # TODO: implement loading from ckpt_path instead of using checkpointer for only loading params
     @abc.abstractmethod
     def load_from_ckpt(checkpointer: Checkpointer, state: PyTree, use_best: bool = True) -> PyTree:
         """
