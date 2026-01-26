@@ -6,8 +6,6 @@ from jax.sharding import Sharding
 from jaxtyping import Array, PyTree
 from optax import GradientTransformation
 
-from stax.checkpointer import Checkpointer
-
 shardingType = Optional[Union[Sharding, tuple[Sharding, ...]]]
 
 
@@ -33,7 +31,7 @@ class modelBase(abc.ABC):
         raise NotImplementedError("This function hasn't been implemented yet")
 
     @abc.abstractmethod
-    def load_from_ckpt(checkpointer: Checkpointer, state: PyTree, use_best: bool = True) -> PyTree:
+    def load_from_ckpt(self, path: str, step_number: Optional[int] = None, use_best=False) -> PyTree:
         """
         Load model weights from a checkpoint.
         Args:
