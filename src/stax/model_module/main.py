@@ -34,7 +34,7 @@ class modelBase(abc.ABC):
 
     # TODO: implement loading from ckpt_path instead of using checkpointer for only loading params
     @abc.abstractmethod
-    def load_from_ckpt(self, checkpointer: Checkpointer, state: PyTree, use_best: bool = True) -> PyTree:
+    def load_from_ckpt(checkpointer: Checkpointer, state: PyTree, use_best: bool = True) -> PyTree:
         """
         Load model weights from a checkpoint.
         Args:
