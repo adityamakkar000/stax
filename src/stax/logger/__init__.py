@@ -2,7 +2,7 @@ import os
 
 from loguru import logger
 
-RANK = int(r) if (r := os.environ.get("RANK", None) is not None) else r
+RANK = int(r) if (r := os.environ.get("RANK", None)) is not None else r
 
 
 class FakeLogger:
