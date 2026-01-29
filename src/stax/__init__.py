@@ -2,6 +2,7 @@ from stax.checkpointer import (
     Checkpointer,
 )
 from stax.fn import (
+    StepFn,
     get_steps_fn,
 )
 from stax.logger import staxLogger
@@ -37,6 +38,7 @@ __all__ = [
     # checkpointer
     "Checkpointer",
     # fn
+    "StepFn",
     "get_steps_fn",
     # utils
     "reshape_key_into_array",
