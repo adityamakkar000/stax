@@ -63,11 +63,12 @@ def process_aux(out: Union[Array, Tuple[Array, PyTree]], has_aux: bool = True) -
     return metrics  # type: ignore
 
 
-def get_memory() -> float:
+def get_memory() -> tuple[float, float]:
     """
-    Get the current memory usage in GB.
+    Get the min and max memory usage across all devices in GB.
 
     Returns:
-        Memory usage in GB.
+        A tuple of the min and max memory useage.
     """
-    return jax.local_devices()[0].memory_stats()["bytes_in_use"] / (1024**3)
+    memory_stats = [device.memory_stats()["bytes_in_use"] for device in jax.local_devices()]
+    return (min(memory_stats) / (1024**3), max(memory_stats) / (1024**3))
