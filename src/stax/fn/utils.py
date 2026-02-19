@@ -1,5 +1,6 @@
 from typing import Any, Callable, Dict, Protocol, Tuple, Union
 
+import jax
 from jaxtyping import Array, PyTree
 
 from stax.model_module import modelBase
@@ -60,3 +61,13 @@ def process_aux(out: Union[Array, Tuple[Array, PyTree]], has_aux: bool = True) -
     else:
         metrics = {"loss": out}
     return metrics  # type: ignore
+
+
+def get_memory() -> float:
+    """
+    Get the current memory usage in GB.
+
+    Returns:
+        Memory usage in GB.
+    """
+    return jax.local_devices()[0].memory_stats()["bytes_in_use"] / (1024**3)
