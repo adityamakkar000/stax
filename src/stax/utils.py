@@ -230,14 +230,3 @@ def init_distributed_jax():
         logger.info(f"\tDevice ID: {dev.id}, Platform: {dev.platform}, Kind: {dev.device_kind}")
     multihost_utils.sync_global_devices("init_distributed_jax")
     return
-
-
-def get_memory() -> tuple[float, float]:
-    """
-    Get the min and max memory usage across all devices in GB.
-
-    Returns:
-        A tuple of the min and max memory useage.
-    """
-    memory_stats = [(device.memory_stats()["bytes_in_use"] / (1024**3)) for device in jax.local_devices()]
-    return (min(memory_stats), max(memory_stats))

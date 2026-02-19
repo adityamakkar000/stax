@@ -1,5 +1,6 @@
 from typing import Any, Callable, Dict, Protocol, Tuple, Union
 
+import jax
 from jaxtyping import Array, PyTree
 
 from stax.model_module import modelBase
@@ -60,3 +61,14 @@ def process_aux(out: Union[Array, Tuple[Array, PyTree]], has_aux: bool = True) -
     else:
         metrics = {"loss": out}
     return metrics  # type: ignore
+
+
+def get_memory() -> tuple[float, float]:
+    """
+    Get the min and max memory usage across all devices in GB.
+
+    Returns:
+        A tuple of the min and max memory useage.
+    """
+    memory_stats = [(device.memory_stats()["bytes_in_use"] / (1024**3)) for device in jax.local_devices()]
+    return (min(memory_stats), max(memory_stats))
