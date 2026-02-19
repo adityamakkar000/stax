@@ -23,6 +23,7 @@ from stax.sharding import (
 from stax.utils import (
     Tracker,
     estimate_compile_stats,
+    get_memory,
     get_perf_func,
     get_primary_host,
     get_rank,
@@ -56,6 +57,7 @@ __all__ = [
     "init_distributed_jax",
     "get_primary_host",
     "get_rank",
+    "get_memory",
     # writer
     "BaseMetricWriter",
     "TextWriter",
