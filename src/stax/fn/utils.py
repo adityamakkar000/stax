@@ -70,5 +70,5 @@ def get_memory() -> tuple[float, float]:
     Returns:
         A tuple of the min and max memory useage.
     """
-    memory_stats = [device.memory_stats()["bytes_in_use"] for device in jax.local_devices()]
-    return (min(memory_stats) / (1024**3), max(memory_stats) / (1024**3))
+    memory_stats = [(device.memory_stats()["bytes_in_use"] / (1024**3)) for device in jax.local_devices()]
+    return (min(memory_stats), max(memory_stats))
