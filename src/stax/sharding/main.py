@@ -70,6 +70,7 @@ def setup_mesh(devices: np.ndarray | None = None):
         # if jax cannot create optimal mesh layout, make a manual mesh
         logger.warning("Failed to create mesh with make_mesh, falling back to `jax.sharding.Mesh`")
         mesh = Mesh(devices, axis_names, axis_type)
+    jax.set_mesh(mesh)
     logger.info(f"setup mesh : {mesh}")
     return mesh
 
