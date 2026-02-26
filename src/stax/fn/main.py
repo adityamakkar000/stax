@@ -1,91 +1,104 @@
+from functools import partial
+from typing import Any, Dict, Optional, Tuple, Union
+
 import jax
-from flax import linen as nn
-from jaxtyping import PyTree, Array
-from typing import Union, Callable, Tuple
 import jax.numpy as jnp
-import optax
-
 import numpy as np
-from stax.sharding import setup_dp, get_dp_sharding, SHARDING_TYPES
+import optax
+from jax.sharding import NamedSharding
+from jaxtyping import Array, PyTree
 
-from jax.sharding import (
-    NamedSharding,
-    PartitionSpec as P,
-)
+from stax.logger import staxLogger as logger
+from stax.model_module import modelBase
+from stax.sharding import ShardingConfig, Shardings, ShardingType, get_sharding, setup_mesh
 
-
-# TODO: fix all type infromation
-
-jax_key = Union[jax.random.key, jax.random.PRNGKey]
-sharding = jax.sharding.NamedSharding
-Params = PyTree
-Batch = PyTree
-OptState = PyTree
-
-StepFn = Callable[[Params, Batch], float | tuple[float, PyTree]]
-TrainFn = Callable[[Params, OptState, Batch], tuple[Params, OptState, float]]
-ValFn = Callable[[Params, Batch], float]
-
-
-def reshape_key_into_array(key: jax.random.PRNGKey, num_keys) -> Array:
-    keys = jnp.array(jax.random.split(key, num_keys))
-    if keys.ndim == 1:
-        keys = keys.reshape(1, -1)
-    return keys
-
-
-def process_aux(out: PyTree, has_aux: bool = True) -> PyTree:
-    if has_aux:
-        _, metrics = out
-    else:
-        metrics = {"loss": out}
-    return metrics
-
-
-def get_single_step_fn(fn: StepFn, model: nn.Module):
-    def step_fn(params, *batch: Batch, train=True) -> float:
-        return fn(model, params, *batch, train=train)
-
-    return step_fn
+from .utils import Batch, Metrics, OptState, Params, SingleStepFn, StepFn, TrainFn, ValFn, process_aux
 
 
 def train_step(
-    step_fn: callable,
-    tx: optax,
-    params: PyTree,
-    opt_state: PyTree,
-    batch: PyTree,
+    step_fn: SingleStepFn,
+    tx: optax.GradientTransformation,
+    params: Params,
+    opt_state: OptState,
+    batch: Batch,
     grad_steps: int = 1,
     has_aux: bool = True,
-) -> tuple[PyTree, PyTree]:
-    def grad_fn(grads: PyTree, batch: PyTree) -> tuple[PyTree, PyTree]:
-        grad_fn = jax.value_and_grad(
-            lambda params, *batch: step_fn(params, *batch, train=True), has_aux=has_aux
-        )
-        out, grads = grad_fn(params, *batch)
+    offload_opt_state: Optional[PyTree[NamedSharding]] = None,
+) -> Dict[str, Any]:
+    """
+    Performs a training step, including gradient calculation and parameter updates.
+    Supports gradient accumulation via `grad_steps`.
+
+    Args:
+        step_fn: The function computing loss/metrics for a single micro-batch.
+        tx: The Optax gradient transformation (optimizer).
+        params: Current model parameters.
+        opt_state: Current optimizer state.
+        batch: The input batch (potentially containing multiple micro-batches).
+        grad_steps: Number of gradient accumulation steps (micro-batches).
+        has_aux: Whether step_fn returns auxiliary metrics.
+        offload_opt_state: Optional sharding for offloading optimizer state.
+
+    Returns:
+        A dictionary containing updated 'metrics', 'params', and 'opt_state'.
+    """
+
+    def grad_fn(grads: Params, batch: Batch) -> Tuple[Params, Metrics]:
+        def loss_fn(params: Params, batch: Batch) -> Union[Array, Tuple[Array, PyTree]]:
+            with jax.named_scope("fwd_pass"):
+                return step_fn(params, *batch, train=True)  # type: ignore
+
+        grad_fn_inner = jax.value_and_grad(loss_fn, has_aux=has_aux)
+        out, new_grads = grad_fn_inner(params, batch)
         metrics = process_aux(out, has_aux=has_aux)
+
+        grads = jax.tree.map(lambda g, ng: g + ng, grads, new_grads)
         return grads, metrics
 
     grads = jax.tree.map(lambda x: jnp.zeros_like(x, dtype=x.dtype), params)
 
     grads, metrics = jax.lax.scan(grad_fn, grads, batch, length=grad_steps)
+
     grads = jax.tree.map(lambda x: x / grad_steps, grads)
     metrics = jax.tree.map(lambda x: x.mean(axis=0), metrics)
+
+    if offload_opt_state is not None:
+        opt_state = jax.tree.map(
+            lambda x, sharding: jax.device_put(x, sharding),
+            opt_state,
+            offload_opt_state,
+        )
+
     updates, opt_state = tx.update(grads, opt_state, params)
     params = optax.apply_updates(params, updates)
+
     return {"metrics": metrics, "params": params, "opt_state": opt_state}
 
 
 def val_step(
-    step_fn: callable,
-    params: PyTree,
-    batch: PyTree,
-    eval_steps: int = 1,
+    step_fn: SingleStepFn,
+    params: Params,
+    batch: Batch,
+    val_steps: int = 1,
     has_aux: bool = True,
-) -> PyTree:
+) -> Metrics:
+    """
+    Performs a validation step over multiple micro-batches.
+
+    Args:
+        step_fn: The function computing loss/metrics for a single micro-batch.
+        params: Current model parameters.
+        batch: The input batch (potentially containing multiple micro-batches).
+        eval_steps: Number of evaluation steps (micro-batches).
+        has_aux: Whether step_fn returns auxiliary metrics.
+
+    Returns:
+        A dictionary of averaged metrics.
+    """
+
     # carry is a placeholder for scan
-    def val_fn(_carry: None, batch: PyTree) -> tuple[None, PyTree]:
-        out = step_fn(params, *batch, train=False)
+    def val_fn(_carry: None, batch: Batch) -> Tuple[None, Metrics]:
+        out = step_fn(params, *batch, train=False)  # type: ignore
         metrics = process_aux(out, has_aux=has_aux)
         return _carry, metrics
 
@@ -93,76 +106,93 @@ def val_step(
         val_fn,
         None,  # start carry with None
         batch,
-        length=eval_steps,
+        length=val_steps,
     )
     metrics = jax.tree.map(lambda x: x.mean(axis=0), metrics)
+
     return metrics
 
 
 def get_steps_fn(
-    step_fn: callable,
-    model: nn.Module,
-    tx: optax,
+    step_fn: StepFn,
+    model: modelBase,
+    tx: optax.GradientTransformation,
     has_aux: bool = True,
     grad_steps: int = 1,
-    eval_steps: int = 1,
-    sharding: str | None = None,
-    devices: np.ndarray | None = None,
-    data_shard_axis: int = 0,
-) -> tuple[callable, callable, dict]:
-    # TODO: make use of shardings
+    val_steps: int = 1,
+    sharding: ShardingConfig = ShardingConfig(),
+    devices: Optional[np.ndarray] = None,
+    **jit_kwargs,
+) -> Tuple[TrainFn, ValFn, Shardings]:
+    """
+    Creates JIT-compiled training and validation functions, optionally with sharding.
 
-    single_step = get_single_step_fn(step_fn, model)
+    Args:
+        step_fn: The step function taking (model, params, *batch, train).
+        model: The modelBase instance.
+        tx: The Optax optimizer.
+        has_aux: Whether the step function returns auxiliary metrics.
+        grad_steps: Number of gradient accumulation steps.
+        val_steps: Number of validation steps per batch.
+        sharding: The type of sharding strategy to use (e.g., from SHARDING_TYPES).
+        devices: Array of devices to use for sharding mesh.
+        **jit_kwargs: Additional keyword arguments to pass to jax.jit.
 
-    def train_fn_jit(params, opt_state, *batch):
+    Returns:
+        A tuple containing:
+        - train_fn: JIT-compiled training function.
+        - val_fn: JIT-compiled validation function.
+        - shardings: Sharding specifications for params, optimizer state and metrics.
+    """
+    single_step = partial(step_fn, model)
+
+    if sharding.sharding_type == ShardingType.SINGLE:
+        if devices is None:
+            devices = np.array([jax.devices()[0]])
+        elif devices.size > 1 or devices.ndim > 1:
+            raise ValueError(f"expected single device got {devices=}")
+
+    mesh = setup_mesh(devices=devices)
+    shard_data, shardings = get_sharding(mesh, sharding)
+    train_shardings = {
+        "metrics": shardings.metrics_sharding,
+        "params": shardings.param_sharding,
+        "opt_state": shardings.opt_state_sharding,
+    }
+
+    offload_opt_state_sharding = None
+    if sharding.opt_state_offload:
+        offload_opt_state_sharding = jax.tree.map(lambda x: x.with_memory_kind("device"), shardings.opt_state_sharding)
+
+    @partial(jax.jit, out_shardings=train_shardings, **jit_kwargs)
+    def train_fn(params: Params, opt_state: OptState, *batch: Batch) -> Dict[str, Any]:
+        logger.info("compiling train step fn ...")
         with jax.named_scope("train_step"):
-            return train_step(
+            out = train_step(
                 single_step,
                 tx,
                 params,
                 opt_state,
-                batch,
+                shard_data(batch),
                 grad_steps=grad_steps,
                 has_aux=has_aux,
+                offload_opt_state=offload_opt_state_sharding,
             )
+            out["metrics"] = {f"train/{k}": v for k, v in out["metrics"].items()}
+            return out
 
-    def val_fn_jit(params, *batch):
+    @partial(jax.jit, out_shardings=shardings.metrics_sharding, **jit_kwargs)
+    def val_fn(params: Params, *batch: Batch) -> Metrics:
+        logger.info("compiling val fn ...")
         with jax.named_scope("val_step"):
-            return val_step(
-                single_step, params, batch, eval_steps=eval_steps, has_aux=has_aux
+            val_metrics = val_step(
+                single_step,
+                params,
+                shard_data(batch),
+                val_steps=val_steps,
+                has_aux=has_aux,
             )
+            val_metrics = {f"val/{k}": v for k, v in val_metrics.items()}
+            return val_metrics
 
-    if sharding is not None:
-        assert sharding in list(SHARDING_TYPES.keys()), (
-            f"got {sharding=} but expected it to be in {list(SHARDING_TYPES.keys())}"
-        )
-        mesh = setup_dp(devices=devices)
-        shard_data, (param_sharding, opt_state_sharding) = SHARDING_TYPES[sharding](
-            mesh, data_axis=data_shard_axis
-        )
-        replicate_sharding = NamedSharding(mesh, P())
-
-        train_fn = lambda params, opt_state, *batch: jax.jit(
-            train_fn_jit,
-            out_shardings={
-                "metrics": replicate_sharding,
-                "params": param_sharding,
-                "opt_state": opt_state_sharding,
-            },
-        )(params, opt_state, *shard_data(batch))
-
-        val_fn = lambda params, *batch: jax.jit(
-            val_fn_jit, out_shardings=replicate_sharding
-        )(params, *shard_data(batch))
-
-    else:
-        train_fn = jax.jit(train_fn_jit)
-        val_fn = jax.jit(val_fn_jit)
-        param_sharding, opt_state_sharding = (
-            jax.sharding.SingleDeviceSharding(jax.devices()[0]),
-        ) * 2
-
-    val_fn_final = lambda params, *batch: {
-        f"val_{k}": v for k, v in val_fn(params, *batch).items()
-    }
-    return train_fn, val_fn_final, (param_sharding, opt_state_sharding)
+    return train_fn, val_fn, shardings
