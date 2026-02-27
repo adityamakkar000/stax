@@ -105,7 +105,6 @@ def get_sharding(mesh: Mesh, config: ShardingConfig) -> tuple[Callable[[PyTree],
     data_sharding = NamedSharding(mesh, P(*(data_tuple)))
 
     def shard_data(batch: PyTree) -> PyTree:
-
         def put_batch_fn(x: Array):
             if is_key(x):
                 # we can't make new keys for each device
@@ -116,14 +115,14 @@ def get_sharding(mesh: Mesh, config: ShardingConfig) -> tuple[Callable[[PyTree],
                 # just keep the same key on all devices
                 return jax.device_put(x, replicate_sharding)
             if (num_hosts := jax.process_count()) > 1:
-                    x_shape = (
-                        *x_shape[: config.data_shard_dim],
-                        x_shape[config.data_shard_dim] * num_hosts,
-                        *x_shape[config.data_shard_dim + 1 :],
-                    )
-                    x_split = np.split(x, len(mesh.local_devices), axis=config.data_shard_dim)
-                    x_on_device = jax.device_put(x_split, mesh.local_devices)
-                    return jax.make_array_from_single_device_arrays(x_shape, data_sharding, x_on_device)
+                x_shape = (
+                    *x_shape[: config.data_shard_dim],
+                    x_shape[config.data_shard_dim] * num_hosts,
+                    *x_shape[config.data_shard_dim + 1 :],
+                )
+                x_split = np.split(x, len(mesh.local_devices), axis=config.data_shard_dim)
+                x_on_device = jax.device_put(x_split, mesh.local_devices)
+                return jax.make_array_from_single_device_arrays(x_shape, data_sharding, x_on_device)
             return jax.device_put(x, data_sharding)
 
         return jax.tree.map(put_batch_fn, batch)
