@@ -116,9 +116,9 @@ def get_sharding(mesh: Mesh, config: ShardingConfig) -> tuple[Callable[[PyTree],
                 return jax.device_put(x, replicate_sharding)
             if (num_hosts := jax.process_count()) > 1:
                 x_shape = (
-                    *x_shape[: config.data_shard_dim],
-                    x_shape[config.data_shard_dim] * num_hosts,
-                    *x_shape[config.data_shard_dim + 1 :],
+                    *x.shape[:config.data_shard_dim],
+                    x.shape[config.data_shard_dim] * num_hosts,
+                    *x.shape[config.data_shard_dim+1:],
                 )
                 x_split = np.split(x, len(mesh.local_devices), axis=config.data_shard_dim)
                 x_on_device = jax.device_put(x_split, mesh.local_devices)
