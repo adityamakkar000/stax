@@ -104,8 +104,6 @@ def get_sharding(mesh: Mesh, config: ShardingConfig) -> tuple[Callable[[PyTree],
     data_tuple = [None for _ in range(config.data_shard_dim)] + [mesh.axis_names[0]]
     data_sharding = NamedSharding(mesh, P(*(data_tuple)))
 
-    # TODO: make this different for multicontroller jax
-    # using jax.make_array_from_local_devices
     def shard_data(batch: PyTree) -> PyTree:
         def put_batch_fn(x: Array):
             if is_key(x):
@@ -116,6 +114,15 @@ def get_sharding(mesh: Mesh, config: ShardingConfig) -> tuple[Callable[[PyTree],
                 # TODO: when we switch to manual sharding then make a new key for now
                 # just keep the same key on all devices
                 return jax.device_put(x, replicate_sharding)
+            if (num_hosts := jax.process_count()) > 1:
+                x_shape = (
+                    *x_shape[: config.data_shard_dim],
+                    x_shape[config.data_shard_dim] * num_hosts,
+                    *x_shape[config.data_shard_dim + 1 :],
+                )
+                x_split = np.split(x, len(mesh.local_devices), axis=config.data_shard_dim)
+                x_on_device = jax.device_put(x_split, mesh.local_devices)
+                return jax.make_array_from_single_device_arrays(x_shape, data_sharding, x_on_device)
             return jax.device_put(x, data_sharding)
 
         return jax.tree.map(put_batch_fn, batch)
