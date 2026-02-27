@@ -121,7 +121,9 @@ def get_sharding(
     is_multi_host = jax.process_count() > 1
 
     def shard_data(batch: PyTree) -> PyTree:
-
+        x_shape = list(x.shape)
+        x_shape[config.data_shard_dim] *= num_hosts
+        x_shape = tuple(x_shape)
         def put_batch_fn(x: Array):
             if is_key(x):
                 # we can't make new keys for each device
@@ -132,18 +134,14 @@ def get_sharding(
                 # just keep the same key on all devices
                 return jax.device_put(x, replicate_sharding)
             if is_multi_host:
-                # Per-host data → global array. JAX combines all hosts' shards.
-                # global_shape: only the sharded dim is scaled by process_count().
-                local_shape = np.shape(x)
-                dim = config.data_shard_dim
-                global_shape = (
-                    *local_shape[:dim],
-                    local_shape[dim] * jax.process_count(),
-                    *local_shape[dim + 1 :],
-                )
-                return jax.make_array_from_process_local_data(
-                    data_sharding, x, global_shape=global_shape
-                )
+                num_hosts = jax.process_count()
+                if jax.local_device_count() == jax.device_count():
+                    return jax.device_put(x, data_sharding)
+                else:
+                    x_shape = (*x_shape[:config.data_shard_dim], x_shape[config.data_shard_dim] * num_hosts, *x_shape[config.data_shard_dim + 1:])
+                    x_split = np.split(x, len(mesh.local_devices), axis=config.data_shard_dim)
+                    x_on_device = jax.device_put(x_split, mesh.local_devices)
+                    return jax.make_array_from_single_device_arrays(x_shape, data_sharding, x_on_device)
             return jax.device_put(x, data_sharding)
 
         return jax.tree.map(put_batch_fn, batch)
