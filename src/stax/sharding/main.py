@@ -53,6 +53,7 @@ class Shardings:
     param_sharding: PyTree[NamedSharding]
     opt_state_sharding: PyTree[NamedSharding]
     metrics_sharding: NamedSharding
+    shard_data: Callable[[PyTree], PyTree]
 
 
 def setup_mesh(devices: np.ndarray | None = None):
@@ -75,7 +76,7 @@ def setup_mesh(devices: np.ndarray | None = None):
     return mesh
 
 
-def get_sharding(mesh: Mesh, config: ShardingConfig) -> tuple[Callable[[PyTree], PyTree], Shardings]:
+def get_sharding(mesh: Mesh, config: ShardingConfig) -> Shardings:
     """Adapted from https://github.com/kvfrans/jaxtransformer"""
     assert len(mesh.axis_names) == 1, "dp mesh should only have one mesh"
 
@@ -107,27 +108,19 @@ def get_sharding(mesh: Mesh, config: ShardingConfig) -> tuple[Callable[[PyTree],
     def shard_data(batch: PyTree) -> PyTree:
         def put_batch_fn(x: Array):
             if is_key(x):
-                # we can't make new keys for each device
-                # since we are passing shardings to the jit fucntion
-                # so it doens't become a single key in the view of the functoin
-                # unlike shard map
-                # TODO: when we switch to manual sharding then make a new key for now
-                # just keep the same key on all devices
                 return jax.device_put(x, replicate_sharding)
-            if (num_hosts := jax.process_count()) > 1:
-                x_shape = (
-                    *x.shape[: config.data_shard_dim],
-                    x.shape[config.data_shard_dim] * num_hosts,
-                    *x.shape[config.data_shard_dim + 1 :],
-                )
-                x_split = np.split(x, len(mesh.local_devices), axis=config.data_shard_dim)
-                x_on_device = jax.device_put(x_split, mesh.local_devices)
-                return jax.make_array_from_single_device_arrays(x_shape, data_sharding, x_on_device)
-            return jax.device_put(x, data_sharding)
+
+            num_hosts = jax.process_count()
+            x_shape = (
+                *x.shape[: config.data_shard_dim],
+                x.shape[config.data_shard_dim] * num_hosts,
+                *x.shape[config.data_shard_dim + 1 :],
+            )
+            return jax.make_array_from_process_local_data(data_sharding, x, x_shape)
 
         return jax.tree.map(put_batch_fn, batch)
 
     if config.opt_state_offload:
         opt_state_sharding = jax.tree.map(lambda x: x.with_memory_kind("pinned_host"), opt_state_sharding)
 
-    return shard_data, Shardings(param_sharding, opt_state_sharding, metrics_sharding)
+    return Shardings(param_sharding, opt_state_sharding, metrics_sharding, shard_data)
