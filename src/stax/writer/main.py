@@ -59,11 +59,9 @@ class BaseMetricWriter(abc.ABC):
             cur_metrics = Metric(step, data)
             self.prev_metric, metric_to_write = cur_metrics, self.prev_metric
 
-            if metric_to_write is None:
-                return
-
-            self._async_write_metrics(metric_to_write)
-            self._log(metric_to_write)
+            if metric_to_write is not None:
+                self._async_write_metrics(metric_to_write)
+                self._log(metric_to_write)
         sync_global_devices("writer_sync")
 
     def _log(self, metric: Metric):
