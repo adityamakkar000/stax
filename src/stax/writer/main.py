@@ -82,8 +82,8 @@ class BaseMetricWriter(abc.ABC):
 
     def finish(self):
         """Finish writing. Only primary host performs cleanup."""
+        self(step=-1, data={})  # flush last metric
         if self.is_primary_host:
-            self(step=-1, data={})  # flush last metric
             self._finish()
         sync_global_devices("writer_finish")
 
