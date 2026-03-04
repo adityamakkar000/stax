@@ -153,7 +153,7 @@ def get_steps_fn(
             raise ValueError(f"expected single device got {devices=}")
 
     mesh = setup_mesh(devices=devices)
-    shard_data, shardings = get_sharding(mesh, sharding)
+    shardings = get_sharding(mesh, sharding)
     train_shardings = {
         "metrics": shardings.metrics_sharding,
         "params": shardings.param_sharding,
@@ -164,35 +164,41 @@ def get_steps_fn(
     if sharding.opt_state_offload:
         offload_opt_state_sharding = jax.tree.map(lambda x: x.with_memory_kind("device"), shardings.opt_state_sharding)
 
-    @partial(jax.jit, out_shardings=train_shardings, **jit_kwargs)
     def train_fn(params: Params, opt_state: OptState, *batch: Batch) -> Dict[str, Any]:
-        logger.info("compiling train step fn ...")
-        with jax.named_scope("train_step"):
-            out = train_step(
-                single_step,
-                tx,
-                params,
-                opt_state,
-                shard_data(batch),
-                grad_steps=grad_steps,
-                has_aux=has_aux,
-                offload_opt_state=offload_opt_state_sharding,
-            )
-            out["metrics"] = {f"train/{k}": v for k, v in out["metrics"].items()}
-            return out
+        @partial(jax.jit, out_shardings=train_shardings, **jit_kwargs)
+        def train_fn_jit(params: Params, opt_state: OptState, *batch: Batch) -> Dict[str, Any]:
+            logger.info("compiling train step fn ...")
+            with jax.named_scope("train_step"):
+                out = train_step(
+                    single_step,
+                    tx,
+                    params,
+                    opt_state,
+                    batch,
+                    grad_steps=grad_steps,
+                    has_aux=has_aux,
+                    offload_opt_state=offload_opt_state_sharding,
+                )
+                out["metrics"] = {f"train/{k}": v for k, v in out["metrics"].items()}
+                return out
 
-    @partial(jax.jit, out_shardings=shardings.metrics_sharding, **jit_kwargs)
+        return train_fn_jit(params, opt_state, *shardings.shard_data(batch))
+
     def val_fn(params: Params, *batch: Batch) -> Metrics:
-        logger.info("compiling val fn ...")
-        with jax.named_scope("val_step"):
-            val_metrics = val_step(
-                single_step,
-                params,
-                shard_data(batch),
-                val_steps=val_steps,
-                has_aux=has_aux,
-            )
-            val_metrics = {f"val/{k}": v for k, v in val_metrics.items()}
-            return val_metrics
+        @partial(jax.jit, out_shardings=shardings.metrics_sharding, **jit_kwargs)
+        def val_fn_jit(params: Params, *batch: Batch) -> Metrics:
+            logger.info("compiling val fn ...")
+            with jax.named_scope("val_step"):
+                val_metrics = val_step(
+                    single_step,
+                    params,
+                    batch,
+                    val_steps=val_steps,
+                    has_aux=has_aux,
+                )
+                val_metrics = {f"val/{k}": v for k, v in val_metrics.items()}
+                return val_metrics
+
+        return val_fn_jit(params, *shardings.shard_data(batch))
 
     return train_fn, val_fn, shardings
