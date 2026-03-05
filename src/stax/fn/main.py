@@ -182,7 +182,19 @@ def get_steps_fn(
             return out
 
     def train_fn(params: Params, opt_state: OptState, *batch: Batch) -> Dict[str, Any]:
-        return train_fn_jit(params, opt_state, *shardings.shard_data(batch))
+        data = shardings.shard_data(batch)
+        # for debugging let's log dtype, sharding and shape to see why it keep recompiling
+        # for params and opt_state lets take 5 leafs and log their sharding, dtype and shape
+
+        logger.info("batch data sharded with sharding: ")
+        for i, d in enumerate(data):
+            logger.info(f"batch[{i}] shape: {d.shape}, dtype: {d.dtype}, sharding: {d.sharding}")
+        for i, (p, s) in enumerate(jax.tree_util.tree_flatten_with_path(params)[0][:5]):
+            logger.info(f"param[{i}] shape: {p.shape}, dtype: {p.dtype}, sharding: {s}")
+        for i, (o, s) in enumerate(jax.tree_util.tree_flatten_with_path(opt_state)[0][:5]):
+            logger.info(f"opt_state[{i}] shape: {o.shape}, dtype: {o.dtype}, sharding: {s}")
+
+        return train_fn_jit(params, opt_state, *data)
 
     @partial(jax.jit, out_shardings=shardings.metrics_sharding, **jit_kwargs)
     def val_fn_jit(params: Params, *batch: Batch) -> Metrics:
