@@ -187,8 +187,7 @@ def get_steps_fn(
         # for params and opt_state lets take 5 leafs and log their sharding, dtype and shape
 
         logger.info("batch data sharded with sharding: ")
-        for i, d in enumerate(data):
-            logger.info(f"batch[{i}] shape: {d.shape}, dtype: {d.dtype}, sharding: {d.sharding}")
+        jax.tree.map(lambda x: logger.info(f"shape: {x.shape}, dtype: {x.dtype}, sharding: {x.sharding}"), data[0])
         for i, (p, s) in enumerate(jax.tree_util.tree_flatten_with_path(params)[0][:5]):
             logger.info(f"param[{i}] shape: {p.shape}, dtype: {p.dtype}, sharding: {s}")
         for i, (o, s) in enumerate(jax.tree_util.tree_flatten_with_path(opt_state)[0][:5]):
