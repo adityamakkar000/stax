@@ -236,7 +236,7 @@ def metrics_all_reduce(metrics: dict[str, float]) -> dict[str, float]:
     """All reduces metrics across hosts by averaging."""
 
     for key, value in metrics.items():
-        all_gathered_val = multihost_utils.process_allgather(jnp.array(value), tiled=False)
+        all_gathered_val = multihost_utils.process_allgather(jnp.array(value), tiled=True)
         mean_val = jnp.mean(all_gathered_val)
         metrics[key] = mean_val.item()
     return metrics
