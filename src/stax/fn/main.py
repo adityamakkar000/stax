@@ -187,11 +187,29 @@ def get_steps_fn(
         # for params and opt_state lets take 5 leafs and log their sharding, dtype and shape
 
         logger.info("batch data sharded with sharding: ")
-        jax.tree.map(lambda x: logger.info(f"shape: {x.shape}, dtype: {x.dtype}, sharding: {x.sharding}"), data[0])
+        # jax.tree.map(lambda x: logger.info(f"shape: {x.shape}, dtype: {x.dtype}, sharding: {x.sharding}"), data[0])
         # jax.tree_util.tree_flatten_with_path(params)[0][:5]
         #     logger.info(f"param[{i}] shape: {p.shape}, dtype: {p.dtype}, sharding: {s}")
         # for i, (o, s) in enumerate(jax.tree_util.tree_flatten_with_path(opt_state)[0][:5]):
         #     logger.info(f"opt_state[{i}] shape: {o.shape}, dtype: {o.dtype}, sharding: {s}")
+
+        def _sig(name, x):
+            typ = type(x).__name__
+            dtype = getattr(x, "dtype", "N/A")
+            shape = getattr(x, "shape", "N/A")
+            sharding = getattr(x, "sharding", "N/A")
+            logger.info(f"[{name}: type={typ}, dtype={dtype}, shape={shape}, sharding={sharding}")
+
+        leaves = jax.tree.leaves(params)
+        logger.info(f"[ COMPILE ] params: n_leaves={len(leaves)}")
+        for i, leaf in enumerate(leaves[:5]):  # first 5 leaves
+            _sig(f"params_leaf[{i}]", leaf)
+        if len(leaves) > 5:
+            _sig(f"params_leaf[{len(leaves) - 1}]", leaves[-1])
+        leaves = jax.tree.leaves(opt_state)
+        logger.info(f"[ COMPILE ] opt_state: n_leaves={len(leaves)}")
+        for i, leaf in enumerate(leaves[:5]):  # first 5 leaves
+            _sig(f"opt_state_leaf[{i}]", leaf)
 
         return train_fn_jit(params, opt_state, *data)
 
