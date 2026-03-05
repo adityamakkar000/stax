@@ -232,6 +232,16 @@ def init_distributed_jax():
     return
 
 
+def metrics_all_reduce(metrics: dict[str, float]) -> dict[str, float]:
+    """All reduces metrics across hosts by averaging."""
+
+    for key, value in metrics.items():
+        all_gathered_val = multihost_utils.process_allgather(jnp.array(value), tiled=False)
+        mean_val = jnp.mean(all_gathered_val)
+        metrics[key] = mean_val.item()
+    return metrics
+
+
 def get_memory() -> tuple[float, float]:
     """
     Get the min and max memory usage across all devices in GB.
