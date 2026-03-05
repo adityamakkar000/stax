@@ -188,10 +188,10 @@ def get_steps_fn(
 
         logger.info("batch data sharded with sharding: ")
         jax.tree.map(lambda x: logger.info(f"shape: {x.shape}, dtype: {x.dtype}, sharding: {x.sharding}"), data[0])
-        for i, (p, s) in enumerate(jax.tree_util.tree_flatten_with_path(params)[0][:5]):
-            logger.info(f"param[{i}] shape: {p.shape}, dtype: {p.dtype}, sharding: {s}")
-        for i, (o, s) in enumerate(jax.tree_util.tree_flatten_with_path(opt_state)[0][:5]):
-            logger.info(f"opt_state[{i}] shape: {o.shape}, dtype: {o.dtype}, sharding: {s}")
+        # jax.tree_util.tree_flatten_with_path(params)[0][:5]
+        #     logger.info(f"param[{i}] shape: {p.shape}, dtype: {p.dtype}, sharding: {s}")
+        # for i, (o, s) in enumerate(jax.tree_util.tree_flatten_with_path(opt_state)[0][:5]):
+        #     logger.info(f"opt_state[{i}] shape: {o.shape}, dtype: {o.dtype}, sharding: {s}")
 
         return train_fn_jit(params, opt_state, *data)
 
