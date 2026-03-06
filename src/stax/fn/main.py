@@ -51,7 +51,6 @@ def train_step(
         grad_fn_inner = jax.value_and_grad(loss_fn, has_aux=has_aux)
         out, new_grads = grad_fn_inner(params, batch)
         metrics = process_aux(out, has_aux=has_aux)
-
         grads = jax.tree.map(lambda g, ng: g + ng, grads, new_grads)
         return grads, metrics
 
@@ -165,7 +164,7 @@ def get_steps_fn(
         offload_opt_state_sharding = jax.tree.map(lambda x: x.with_memory_kind("device"), shardings.opt_state_sharding)
 
     @partial(jax.jit, out_shardings=train_shardings, **jit_kwargs)
-    def train_fn_jit(params: Params, opt_state: OptState, *batch: Batch) -> Dict[str, Any]:
+    def train_fn(params: Params, opt_state: OptState, *batch: Batch) -> Dict[str, Any]:
         logger.info("compiling train step fn ...")
         with jax.named_scope("train_step"):
             out = train_step(
@@ -181,40 +180,8 @@ def get_steps_fn(
             out["metrics"] = {f"train/{k}": v for k, v in out["metrics"].items()}
             return out
 
-    def train_fn(params: Params, opt_state: OptState, *batch: Batch) -> Dict[str, Any]:
-        data = shardings.shard_data(batch)
-        # for debugging let's log dtype, sharding and shape to see why it keep recompiling
-        # for params and opt_state lets take 5 leafs and log their sharding, dtype and shape
-
-        logger.info("batch data sharded with sharding: ")
-        # jax.tree.map(lambda x: logger.info(f"shape: {x.shape}, dtype: {x.dtype}, sharding: {x.sharding}"), data[0])
-        # jax.tree_util.tree_flatten_with_path(params)[0][:5]
-        #     logger.info(f"param[{i}] shape: {p.shape}, dtype: {p.dtype}, sharding: {s}")
-        # for i, (o, s) in enumerate(jax.tree_util.tree_flatten_with_path(opt_state)[0][:5]):
-        #     logger.info(f"opt_state[{i}] shape: {o.shape}, dtype: {o.dtype}, sharding: {s}")
-
-        def _sig(name, x):
-            typ = type(x).__name__
-            dtype = getattr(x, "dtype", "N/A")
-            shape = getattr(x, "shape", "N/A")
-            sharding = getattr(x, "sharding", "N/A")
-            logger.info(f"[{name}: type={typ}, dtype={dtype}, shape={shape}, sharding={sharding}")
-
-        leaves = jax.tree.leaves(params)
-        logger.info(f"[ COMPILE ] params: n_leaves={len(leaves)}")
-        for i, leaf in enumerate(leaves[:5]):  # first 5 leaves
-            _sig(f"params_leaf[{i}]", leaf)
-        if len(leaves) > 5:
-            _sig(f"params_leaf[{len(leaves) - 1}]", leaves[-1])
-        leaves = jax.tree.leaves(opt_state)
-        logger.info(f"[ COMPILE ] opt_state: n_leaves={len(leaves)}")
-        for i, leaf in enumerate(leaves[:5]):  # first 5 leaves
-            _sig(f"opt_state_leaf[{i}]", leaf)
-
-        return train_fn_jit(params, opt_state, *data)
-
     @partial(jax.jit, out_shardings=shardings.metrics_sharding, **jit_kwargs)
-    def val_fn_jit(params: Params, *batch: Batch) -> Metrics:
+    def val_fn(params: Params, *batch: Batch) -> Metrics:
         logger.info("compiling val fn ...")
         with jax.named_scope("val_step"):
             val_metrics = val_step(
@@ -226,8 +193,5 @@ def get_steps_fn(
             )
             val_metrics = {f"val/{k}": v for k, v in val_metrics.items()}
             return val_metrics
-
-    def val_fn(params: Params, *batch: Batch) -> Metrics:
-        return val_fn_jit(params, *shardings.shard_data(batch))
 
     return train_fn, val_fn, shardings
