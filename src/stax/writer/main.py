@@ -247,7 +247,7 @@ class WandBWriter(BaseMetricWriter):
             for ro_idx, rollout in enumerate(rollouts):
                 table.add_data(ex_idx, ro_idx, rollout, answer)
 
-        self._run.log({"train_generations": table}, step=step)
+        self._run.log({f"train_generations/{step}": table}, step=step)
 
     def _id(self) -> int:
         """Return WandB run ID.
