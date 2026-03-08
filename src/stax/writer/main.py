@@ -17,6 +17,7 @@ from stax.utils import convert_to_scalar, get_rank
 class Metric:
     step: int
     data: dict[str, Any]
+    generations: Optional[list[tuple[list[str], str]]] = None
 
 
 """
@@ -48,7 +49,7 @@ class BaseMetricWriter(abc.ABC):
         logger.info(f"Setup writer with id: {_id if (_id := self.id) is not None else 'n/a'}")
         sync_global_devices("writer_setup")
 
-    def __call__(self, step: int, data: PyTree):
+    def __call__(self, step: int, data: PyTree, generations: Optional[list[tuple[list[str], str]]] = None):
         """Write metrics. Only primary host performs actual writing.
 
         Args:
@@ -56,7 +57,7 @@ class BaseMetricWriter(abc.ABC):
             data: PyTree containing metric values.
         """
         if self.is_primary_host:
-            cur_metrics = Metric(step, data)
+            cur_metrics = Metric(step, data, generations)
             self.prev_metric, metric_to_write = cur_metrics, self.prev_metric
 
             if metric_to_write is not None:
@@ -73,6 +74,11 @@ class BaseMetricWriter(abc.ABC):
 
         step = metric.step
         data = metric.data
+        generations = metric.generations
+
+        if generations is not None:
+            self._log_generations(step, generations)
+
         metric_strs = it.starmap(
             lambda k, v: f"{k}: {convert_to_scalar(v):.4f}",
             filter(lambda kv: kv[0] in self.metrics_to_print, data.items()),
@@ -126,6 +132,16 @@ class BaseMetricWriter(abc.ABC):
         raise NotImplementedError
 
     @abc.abstractmethod
+    def _log_generations(self, step: int, generations: list[tuple[list[str], str]]) -> None:
+        """Log train generations. Called only on primary host.
+
+        Args:
+            step: Training step number.
+            generations: List of (rollouts, answer) tuples.
+        """
+        raise NotImplementedError
+
+    @abc.abstractmethod
     def _id(self) -> int:
         """Return logger ID. Called only on primary host.
 
@@ -144,6 +160,7 @@ class TextWriter(BaseMetricWriter):
     def _setup_writer(self): ...
     def _async_write_metrics(self, metric: Metric): ...
     def _finish(self) -> None: ...
+    def _log_generations(self, step: int, generations: list[tuple[list[str], str]]) -> None: ...
     def _id(self) -> int:
         return -1
 
@@ -211,6 +228,26 @@ class WandBWriter(BaseMetricWriter):
         """Finish WandB run."""
         if self._run is not None:
             self._run.finish()
+
+    def _log_generations(self, step: int, generations: list[tuple[list[str], str]]) -> None:
+        """Log train generations as a wandb Table.
+
+        Creates a table with one row per rollout. Each tuple in generations produces
+        len(rollouts) rows, all sharing the same example_index and answer.
+
+        Args:
+            step: Training step number.
+            generations: List of (rollouts, answer) tuples.
+        """
+        if self._run is None:
+            raise ValueError("run is None")
+
+        table = wandb.Table(columns=["example_index", "rollout_index", "rollout", "answer"])
+        for ex_idx, (rollouts, answer) in enumerate(generations):
+            for ro_idx, rollout in enumerate(rollouts):
+                table.add_data(ex_idx, ro_idx, rollout, answer)
+
+        self._run.log({"train_generations": table}, step=step)
 
     def _id(self) -> int:
         """Return WandB run ID.
