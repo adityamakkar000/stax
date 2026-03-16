@@ -93,6 +93,17 @@ class BaseMetricWriter(abc.ABC):
             self._finish()
         sync_global_devices("writer_finish")
 
+    def log_eval_results(self, step: int, eval_metrics: dict[str, dict[str, float]]) -> None:
+        """Log evaluation results independently from training metric writes.
+
+        Args:
+            step: Step associated with the evaluation run.
+            eval_metrics: Mapping of eval task name to metric/value mapping.
+        """
+        if self.is_primary_host:
+            self._log_eval_results(step, eval_metrics)
+        sync_global_devices("writer_eval_sync")
+
     @property
     def id(self) -> str:
         """Get logger ID. Returns None on non-primary hosts.
@@ -142,6 +153,16 @@ class BaseMetricWriter(abc.ABC):
         raise NotImplementedError
 
     @abc.abstractmethod
+    def _log_eval_results(self, step: int, eval_metrics: dict[str, dict[str, float]]) -> None:
+        """Log eval results. Called only on primary host.
+
+        Args:
+            step: Step associated with the evaluation run.
+            eval_metrics: Mapping of eval task name to metric/value mapping.
+        """
+        raise NotImplementedError
+
+    @abc.abstractmethod
     def _id(self) -> int:
         """Return logger ID. Called only on primary host.
 
@@ -161,6 +182,7 @@ class TextWriter(BaseMetricWriter):
     def _async_write_metrics(self, metric: Metric): ...
     def _finish(self) -> None: ...
     def _log_generations(self, step: int, generations: list[tuple[list[str], str]]) -> None: ...
+    def _log_eval_results(self, step: int, eval_metrics: dict[str, dict[str, float]]) -> None: ...
     def _id(self) -> int:
         return -1
 
@@ -248,6 +270,29 @@ class WandBWriter(BaseMetricWriter):
                 table.add_data(ex_idx, ro_idx, rollout, answer)
 
         self._run.log({"train_generations": table}, step=step)
+
+    def _log_eval_results(self, step: int, eval_metrics: dict[str, dict[str, float]]) -> None:
+        """Log eval results as a wandb Table.
+
+        Creates one row per eval task with a step and task name column,
+        plus one column per metric found across all tasks.
+
+        Args:
+            step: Step associated with the evaluation run.
+            eval_metrics: Mapping of eval task name to metric/value mapping.
+        """
+        if self._run is None:
+            raise ValueError("run is None")
+
+        metric_names = sorted({metric_name for task_metrics in eval_metrics.values() for metric_name in task_metrics})
+        columns = ["step", "eval_task", *metric_names]
+        table = wandb.Table(columns=columns)
+
+        for eval_task, metrics in eval_metrics.items():
+            row = [step, eval_task, *(convert_to_scalar(metrics.get(metric_name)) for metric_name in metric_names)]
+            table.add_data(*row)
+
+        self._run.log({"eval_metrics": table}, step=step)
 
     def _id(self) -> int:
         """Return WandB run ID.
