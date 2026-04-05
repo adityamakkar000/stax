@@ -126,7 +126,7 @@ def is_key(x: jax.Array) -> bool:
         True if x is a JAX random key else None
 
     """
-    return isinstance(x, jax.Array) and jax.dtypes.issubdtype(x.dtype, jax.dtypes.prng_key)
+    return isinstance(x, jax.Array) and x.ndim == 1 and x.dtype == jnp.uint32 and x.shape[0] == 2
 
 
 def reshape_batch_key(key: Array, n_keys: int, dim: int = 1) -> Array:
