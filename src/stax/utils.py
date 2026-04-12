@@ -244,10 +244,12 @@ def metrics_all_reduce(metrics: dict[str, float]) -> dict[str, float]:
 
 def get_memory() -> tuple[float, float]:
     """
-    Get the min and max memory usage across all devices in GB.
+    Get the max and min memory usage across all devices in GB.
 
     Returns:
-        A tuple of the min and max memory useage.
+        A tuple of the minimum and maximum memory usage across all devices in GB.
     """
-    memory_stats = [(device.memory_stats()["bytes_in_use"] / (1024**3)) for device in jax.local_devices()]
-    return (min(memory_stats), max(memory_stats))
+    mem = [device.memory_stats() for device in jax.local_devices()]
+    max_memory = max([stat["peak_bytes_in_use"] / (1024**3) for stat in mem])
+    min_memory = min([stat["peak_bytes_in_use"] / (1024**3) for stat in mem])
+    return (min_memory, max_memory)
