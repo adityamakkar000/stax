@@ -54,7 +54,7 @@ class Shardings:
     opt_state_sharding: PyTree[NamedSharding]
     metrics_sharding: NamedSharding
     shard_data: Callable[[PyTree], PyTree]
-
+    mesh: jax.sharding.Mesh
 
 def setup_mesh(devices: np.ndarray | None = None):
     if not jax.distributed.is_initialized():
@@ -123,4 +123,4 @@ def get_sharding(mesh: Mesh, config: ShardingConfig) -> Shardings:
     if config.opt_state_offload:
         opt_state_sharding = jax.tree.map(lambda x: x.with_memory_kind("pinned_host"), opt_state_sharding)
 
-    return Shardings(param_sharding, opt_state_sharding, metrics_sharding, shard_data)
+    return Shardings(param_sharding, opt_state_sharding, metrics_sharding, shard_data, mesh)
