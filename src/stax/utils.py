@@ -163,7 +163,7 @@ def reshape_key_into_array(key: PRNGKeyArray, num_keys: int) -> Array:
     return keys
 
 
-def get_perf_func(trace_path, func: JitWrapped, *args, **kwargs) -> None:
+def get_perf_func(trace_path, func: JitWrapped, *args, **kwargs) -> dict:
     """Profiles the performance of a JAX function, logging memory usage and execution time.
 
     Args:
