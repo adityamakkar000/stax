@@ -1,4 +1,3 @@
-import os
 import time
 from types import TracebackType
 from typing import Any, Optional, Type
@@ -9,7 +8,7 @@ import jax.numpy as jnp
 from jax import Array
 from jax._src.pjit import JitWrapped
 from jax.stages import Compiled
-from jaxtyping import PRNGKeyArray
+from jaxtyping import PRNGKeyArray, PyTree
 
 from stax.logger import staxLogger as logger
 
@@ -163,7 +162,7 @@ def reshape_key_into_array(key: PRNGKeyArray, num_keys: int) -> Array:
     return keys
 
 
-def get_perf_func(trace_path, func: JitWrapped, *args, **kwargs) -> dict:
+def get_perf_func(trace_path, func: JitWrapped, *args, **kwargs) -> dict[str, PyTree]:
     """Profiles the performance of a JAX function, logging memory usage and execution time.
 
     Args:
