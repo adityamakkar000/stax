@@ -12,6 +12,7 @@ from jax.stages import Compiled
 from jaxtyping import PRNGKeyArray
 
 from stax.logger import staxLogger as logger
+from .multihost_utils import process_allgather_over_mesh
 
 
 class Tracker:
@@ -232,11 +233,11 @@ def init_distributed_jax():
     return
 
 
-def metrics_all_reduce(metrics: dict[str, float]) -> dict[str, float]:
+def metrics_all_reduce(metrics: dict[str, float], mesh: jax.sharding.Mesh | None = None) -> dict[str, float]:
     """All reduces metrics across hosts by averaging."""
 
     for key, value in metrics.items():
-        all_gathered_val = multihost_utils.process_allgather(jnp.array(value), tiled=True)
+        all_gathered_val = process_allgather_over_mesh(jnp.array(value), tiled=True, mesh=mesh)
         mean_val = jnp.mean(all_gathered_val)
         metrics[key] = mean_val.item()
     return metrics
