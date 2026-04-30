@@ -13,6 +13,7 @@ from stax.model_module import (
     HFModelBase,
     modelBase,
 )
+from stax.multihost_utils import process_allgather_over_mesh, sync_over_mesh
 from stax.sharding import (
     ShardingConfig,
     Shardings,
@@ -73,6 +74,9 @@ __all__ = [
     # model_module
     "HFModelBase",
     "modelBase",
+    # multihost_utils
+    "sync_over_mesh",
+    "process_allgather_over_mesh",
 ]
 
 __version__ = "0.1.0"
