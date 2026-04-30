@@ -220,7 +220,7 @@ class WandBWriter(BaseMetricWriter):
         if self.config is None and self.run_id is None:
             raise ValueError("Either config or run_id must be provided")
 
-        init_args = {
+        init_args: dict = {
             "entity": self.entity,
             "project": self.project,
             "resume": "must" if self.run_id is not None else "allow",
@@ -235,7 +235,7 @@ class WandBWriter(BaseMetricWriter):
             init_args["name"] = self.name
             logger.info(f"Starting a new WandB run with id: {init_args['id']}")
 
-        self._run = wandb.init(**init_args)  # type: ignore
+        self._run = wandb.init(**init_args) 
 
     def _async_write_metrics(self, metric: Metric):
         """Log metrics to WandB.
