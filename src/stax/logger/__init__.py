@@ -1,18 +1,9 @@
-import os
-
+import jax
 from loguru import logger
 
-RANK = int(r) if (r := os.environ.get("RANK", None)) is not None else r
+if jax.process_index() != 0:
+    logger.remove()
 
-
-class FakeLogger:
-    def debug(self, msg, *args, **kwargs): ...
-    def info(self, msg, *args, **kwargs): ...
-    def warning(self, msg, *args, **kwargs): ...
-    def error(self, msg, *args, **kwargs): ...
-    def critical(self, msg, *args, **kwargs): ...
-
-
-staxLogger = logger if (RANK == 0) else FakeLogger()
+staxLogger = logger
 
 __all__ = ["staxLogger"]

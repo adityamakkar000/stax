@@ -12,6 +12,7 @@ from jax.stages import Compiled
 from jaxtyping import PRNGKeyArray
 
 from stax.logger import staxLogger as logger
+
 from .multihost_utils import process_allgather_over_mesh
 
 
@@ -202,9 +203,9 @@ def get_perf_func(trace_path, func: JitWrapped, *args, **kwargs) -> None:
 
 def get_rank() -> int:
     """Returns the current host index based on RANK environment variable."""
-    if os.environ.get("RANK", None) is None:
-        raise ValueError("JAX distributed got no RANK env variable")
-    return int(os.environ["RANK"])
+    if not jax.distributed.is_initialized():
+        raise RuntimeError("JAX distributed environment is not initialized. Call init_distributed_jax() first.")
+    return jax.process_index()
 
 
 def get_primary_host() -> int:
@@ -214,7 +215,6 @@ def get_primary_host() -> int:
 
 def init_distributed_jax():
     """Initializes JAX distributed environment."""
-    get_rank()  # Validate RANK is set
     if jax.distributed.is_initialized():
         logger.warning("JAX distributed is already initialized")
         return
@@ -254,3 +254,4 @@ def get_memory() -> tuple[float, float]:
     max_memory = max([stat["peak_bytes_in_use"] / (1024**3) for stat in mem])
     min_memory = min([stat["peak_bytes_in_use"] / (1024**3) for stat in mem])
     return (min_memory, max_memory)
+
