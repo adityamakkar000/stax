@@ -199,6 +199,7 @@ def get_perf_func(trace_path, func: JitWrapped, *args, **kwargs) -> None:
         "=================================================="
     )
     logger.info(report)
+    return out
 
 
 def get_rank() -> int:
