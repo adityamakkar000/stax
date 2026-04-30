@@ -5,6 +5,7 @@ import jax
 import numpy as np
 from jax._src import array, core, sharding_impls
 from jax._src.interpreters import pxla
+from jax.experimental.multihost_utils import _psum, host_local_array_to_global_array
 from jax.sharding import PartitionSpec as P
 
 """
@@ -65,7 +66,9 @@ def _handle_array_process_allgather(inp, tiled, global_mesh: jax.sharding.Mesh |
             devices = np.array(jax.devices()).reshape(jax.process_count(), jax.local_device_count())
             global_mesh = jax.sharding.Mesh(devices, ("processes", "local_devices"))
         else:
-            assert global_mesh.axis_names == ("processes", "local_devices"), f"Expected global_mesh axis names to be ('processes', 'local_devices'), got {global_mesh.axis_names}"
+            assert global_mesh.axis_names == ("processes", "local_devices"), (
+                f"Expected global_mesh axis names to be ('processes', 'local_devices'), got {global_mesh.axis_names}"
+            )
 
         pspec = P("processes")
         s = jax.sharding.NamedSharding(global_mesh, pspec)
@@ -82,3 +85,50 @@ def _handle_array_process_allgather(inp, tiled, global_mesh: jax.sharding.Mesh |
         with jax.set_mesh(global_mesh):
             out = jax.jit(lambda x: x, out_shardings=P())(global_arr)
     return np.asarray(out.addressable_data(0))
+
+
+def broadcast_over_mesh(in_tree: Any, is_source: bool | None = None, mesh: jax.sharding.Mesh | None = None) -> Any:
+    """Broadcast data from a source host (host 0 by default) to all other hosts.
+
+    Args:
+      in_tree: pytree of arrays - each array *must* have the same shape across the
+        hosts.
+      is_source: optional bool denoting whether the caller is the source. Only
+        'source host' will contribute the data for the broadcast. If None, then
+        host 0 is used.
+
+    Returns:
+      A pytree matching in_tree where the leaves now all contain the data from the
+      first host.
+    """
+    if jax.process_count() == 1:
+        return jax.tree.map(np.asarray, in_tree)
+
+    if is_source is None:
+        is_source = jax.process_index() == 0
+
+    devices: np.ndarray = np.array(jax.devices()).reshape(jax.process_count(), jax.local_device_count())
+
+    if mesh is None:
+        global_mesh = jax.sharding.Mesh(devices, ("processes", "local_devices"))
+    else:
+        global_mesh = mesh
+
+    pspec = P("processes")
+
+    def pre_jit(x):
+        if is_source:
+            inp = x
+        else:
+            inp = np.zeros_like(x)
+        inp = np.expand_dims(inp, axis=0)
+        return host_local_array_to_global_array(inp, global_mesh, pspec)
+
+    def post_jit(x):
+        return jax.device_get(x.addressable_data(0))
+
+    in_tree = jax.tree.map(pre_jit, in_tree)
+    with jax.set_mesh(global_mesh):
+        out_tree = jax.jit(_psum, out_shardings=P())(in_tree)
+
+    return jax.tree.map(post_jit, out_tree)

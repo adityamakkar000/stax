@@ -254,4 +254,3 @@ def get_memory() -> tuple[float, float]:
     max_memory = max([stat["peak_bytes_in_use"] / (1024**3) for stat in mem])
     min_memory = min([stat["peak_bytes_in_use"] / (1024**3) for stat in mem])
     return (min_memory, max_memory)
-

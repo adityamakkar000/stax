@@ -56,6 +56,7 @@ class Shardings:
     shard_data: Callable[[PyTree], PyTree]
     mesh: jax.sharding.Mesh
 
+
 def setup_mesh(devices: np.ndarray | None = None):
     if not jax.distributed.is_initialized():
         raise ValueError("jax distributed has not been initialized")

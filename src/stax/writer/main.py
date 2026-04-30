@@ -6,10 +6,11 @@ from typing import Any, Mapping, Optional
 
 import jax
 import wandb
-from jax.experimental.multihost_utils import broadcast_one_to_all, sync_global_devices
+from jax.experimental.multihost_utils import broadcast_one_to_all
 from jaxtyping import PyTree
 
 from stax.logger import staxLogger as logger
+from stax.multihost_utils import broadcast_over_mesh, sync_over_mesh
 from stax.utils import convert_to_scalar, get_rank
 
 
@@ -30,14 +31,16 @@ performs actual logging to avoid duplication.
 class BaseMetricWriter(abc.ABC):
     """Base writer that only writes from the primary host in multihost environments."""
 
-    def __init__(self, metrics_to_print: list[str] = ["loss"]):
+    def __init__(self, metrics_to_print: list[str] = ["loss"], mesh: jax.sharding.Mesh | None = None):
         """Initialize the metric writer.
 
         Args:
             metrics_to_print: List of metric names to print to console.
+            mesh: The JAX sharding mesh.
         """
         self.metrics_to_print = metrics_to_print
         self.prev_metric: None | Metric = None
+        self.mesh = mesh
 
         self._run = None
         if self.is_primary_host:
@@ -47,7 +50,7 @@ class BaseMetricWriter(abc.ABC):
                 logger.warning("no writer is set")
 
         logger.info(f"Setup writer with id: {_id if (_id := self.id) is not None else 'n/a'}")
-        sync_global_devices("writer_setup")
+        sync_over_mesh("writer_setup", self.mesh)
 
     def __call__(self, step: int, data: PyTree, generations: Optional[list[tuple[list[str], str]]] = None):
         """Write metrics. Only primary host performs actual writing.
@@ -63,7 +66,7 @@ class BaseMetricWriter(abc.ABC):
             if metric_to_write is not None:
                 self._async_write_metrics(metric_to_write)
                 self._log(metric_to_write)
-        sync_global_devices("writer_sync")
+        sync_over_mesh("writer_sync", self.mesh)
 
     def _log(self, metric: Metric):
         """Print formatted metrics to console.
@@ -91,7 +94,7 @@ class BaseMetricWriter(abc.ABC):
         self(step=-1, data={})  # flush last metric
         if self.is_primary_host:
             self._finish()
-        sync_global_devices("writer_finish")
+        sync_over_mesh("writer_finish", self.mesh)
 
     def log_eval_results(self, step: int, eval_metrics: dict[str, dict[str, float]]) -> None:
         """Log evaluation results independently from training metric writes.
@@ -102,7 +105,7 @@ class BaseMetricWriter(abc.ABC):
         """
         if self.is_primary_host:
             self._log_eval_results(step, eval_metrics)
-        sync_global_devices("writer_eval_sync")
+        sync_over_mesh("writer_eval_sync", self.mesh)
 
     @property
     def id(self) -> str:
@@ -111,7 +114,7 @@ class BaseMetricWriter(abc.ABC):
         Returns:
             Logger/run ID or None if not on primary host.
         """
-        _id = broadcast_one_to_all(self._id(), is_source=self.is_primary_host).item()
+        _id = broadcast_over_mesh(self._id(), is_source=self.is_primary_host, mesh=self.mesh).item()
         return str(_id)
 
     @property
@@ -235,7 +238,7 @@ class WandBWriter(BaseMetricWriter):
             init_args["name"] = self.name
             logger.info(f"Starting a new WandB run with id: {init_args['id']}")
 
-        self._run = wandb.init(**init_args) 
+        self._run = wandb.init(**init_args)
 
     def _async_write_metrics(self, metric: Metric):
         """Log metrics to WandB.
