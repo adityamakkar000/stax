@@ -27,7 +27,7 @@ class Tracker:
 
         """
         self.timer = timer
-        self.trace = trace
+        self.trace = trace if (get_rank() == 0) else None
         self.profiling = False
         self.data: dict[str, float] = {}
         self.start: float = 0.0
