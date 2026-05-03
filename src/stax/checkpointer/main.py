@@ -1,7 +1,8 @@
-from typing import Any, Optional, Sequence
+from typing import Any, Optional
 
 import jax
 import orbax.checkpoint as ocp
+from etils import epath
 from jaxtyping import PyTree
 
 import stax
@@ -38,7 +39,8 @@ class Checkpointer:
         best_key: str | None = None,
         best_mode: str = "min",
         *, 
-        active_processes: Optional[set[int]] = None
+        active_processes: Optional[set[int]] = None,
+        train_mesh: Optional[jax.sharding.Mesh] = None
     ) -> None:
         """Initialize the Checkpointer.
 
@@ -62,9 +64,20 @@ class Checkpointer:
 
         # latest checkpointer
         self.checkpoint_dir = output_dir
+        mp_options = ocp.options.MultiprocessingOptions(primary_host=0, active_processes=active_processes)
+        if active_processes is not None:
+            assert train_mesh is not None, "train_mesh must be provided when active_processes is specified"
+            directory = epath.Path(directory)
+            logger.info(f"Active processes for checkpointing: {active_processes}")
+            if jax.process_index() == 0 and not directory.exists():
+                logger.info(f"Creating checkpoint directory at {directory}")
+                directory.mkdir(parents=True, exist_ok=True)
+            stax.sync_over_mesh(train_mesh, "checkpointDirReady")
+            
         self.options = ocp.CheckpointManagerOptions(
             max_to_keep=max_to_keep,
-            multiprocessing_options=ocp.options.MultiprocessingOptions(primary_host=0, active_processes=active_processes),
+            multiprocessing_options=mp_options,
+            create=(active_processes is None)
         )
         self.checkpoint_manager = ocp.CheckpointManager(self.checkpoint_dir, options=self.options)
 
@@ -76,7 +89,7 @@ class Checkpointer:
 
             self.best_checkpoint_dir: str | None = f"{output_dir}/best"
             self.best_options = ocp.CheckpointManagerOptions(
-                max_to_keep=1, best_fn=self.best_fn, best_mode=self.best_mode
+                max_to_keep=1, best_fn=self.best_fn, best_mode=self.best_mode, multiprocessing_options=mp_options, create=(active_processes is None)
             )
             self.best_checkpoint_manager = ocp.CheckpointManager(self.best_checkpoint_dir, options=self.best_options)
         else:

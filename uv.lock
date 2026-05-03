@@ -2298,6 +2298,7 @@ name = "stax"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "etils", extra = ["epath"] },
     { name = "flax" },
     { name = "jax" },
     { name = "jaxtyping" },
@@ -2312,6 +2313,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "etils", extras = ["epath"], specifier = ">=1.14.0" },
     { name = "flax", specifier = ">=0.11.0" },
     { name = "jax", specifier = ">=0.6.2" },
     { name = "jaxtyping", specifier = ">=0.3.3" },
