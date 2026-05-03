@@ -26,7 +26,6 @@ from stax.utils import (
     estimate_compile_stats,
     get_memory,
     get_perf_func,
-    get_primary_host,
     get_rank,
     init_distributed_jax,
     is_key,
@@ -56,7 +55,6 @@ __all__ = [
     "estimate_compile_stats",
     "reshape_batch_key",
     "init_distributed_jax",
-    "get_primary_host",
     "get_rank",
     "get_memory",
     # writer
