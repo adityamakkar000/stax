@@ -67,12 +67,12 @@ class Checkpointer:
         mp_options = ocp.options.MultiprocessingOptions(primary_host=0, active_processes=active_processes)
         if active_processes is not None:
             assert train_mesh is not None, "train_mesh must be provided when active_processes is specified"
-            directory = epath.Path(directory)
+            directory = epath.Path(output_dir)
             logger.info(f"Active processes for checkpointing: {active_processes}")
             if jax.process_index() == 0 and not directory.exists():
                 logger.info(f"Creating checkpoint directory at {directory}")
                 directory.mkdir(parents=True, exist_ok=True)
-            stax.sync_over_mesh(train_mesh, "checkpointDirReady")
+            stax.sync_over_mesh("checkpoint_dir_sync", train_mesh)
             
         self.options = ocp.CheckpointManagerOptions(
             max_to_keep=max_to_keep,
