@@ -208,10 +208,6 @@ def get_rank() -> int:
     return jax.process_index()
 
 
-def get_primary_host() -> int:
-    """Returns the primary host index based on RANK environment variable."""
-    return multihost_utils.broadcast_one_to_all(jax.process_index(), is_source=(get_rank() == 0)).item()
-
 
 def init_distributed_jax():
     """Initializes JAX distributed environment."""

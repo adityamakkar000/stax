@@ -1,4 +1,4 @@
-from typing import Any, Optional
+from typing import Any, Optional, Sequence
 
 import jax
 import orbax.checkpoint as ocp
@@ -37,6 +37,8 @@ class Checkpointer:
         max_to_keep: int = 1,
         best_key: str | None = None,
         best_mode: str = "min",
+        *, 
+        active_processes: Optional[set[int]] = None
     ) -> None:
         """Initialize the Checkpointer.
 
@@ -46,6 +48,7 @@ class Checkpointer:
             best_key (str | None, optional): The key for checkpointing. Must return a scalar value when indexed into metrics (which will be in metadata). Defaults to None.
                 if best_key is provided, ensure that the metrics dict passed in as metadata contains this key.
             best_mode (str, optional): 'min' or 'max' to indicate whether lower or higher values of best_key are better. Defaults to 'min'.
+            active_processes (set[int], optional): Set of process indices that are allowed to perform checkpointing. If None, all processes are used. Defaults to None.
 
         Raises:
             AssertionError: If the provided output_dir is not a valid GCS path.
@@ -61,7 +64,7 @@ class Checkpointer:
         self.checkpoint_dir = output_dir
         self.options = ocp.CheckpointManagerOptions(
             max_to_keep=max_to_keep,
-            multiprocessing_options=ocp.options.MultiprocessingOptions(primary_host=stax.utils.get_primary_host()),
+            multiprocessing_options=ocp.options.MultiprocessingOptions(primary_host=0, active_processes=active_processes),
         )
         self.checkpoint_manager = ocp.CheckpointManager(self.checkpoint_dir, options=self.options)
 
