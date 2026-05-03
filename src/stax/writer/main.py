@@ -192,7 +192,6 @@ class WandBWriter(BaseMetricWriter):
 
     def __init__(
         self,
-        name: str,
         entity: str,
         project: str,
         config: Optional[Mapping[str, Any]] = None,
@@ -202,7 +201,6 @@ class WandBWriter(BaseMetricWriter):
         """Initialize WandB writer.
 
         Args:
-            name: Name of the WandB run.
             entity: WandB entity name.
             project: WandB project name.
             config: Configuration dictionary for new run.
@@ -210,7 +208,6 @@ class WandBWriter(BaseMetricWriter):
         """
         self.entity = entity
         self.project = project
-        self.name = name
         self.config = config
         self.run_id = run_id
         super().__init__(**init_kwargs)
@@ -232,7 +229,6 @@ class WandBWriter(BaseMetricWriter):
         else:
             init_args["id"] = str(random.randint(1, 1_000_000))
             init_args["config"] = self.config
-            init_args["name"] = self.name
             logger.info(f"Starting a new WandB run with id: {init_args['id']}")
 
         self._run = wandb.init(**init_args) 
