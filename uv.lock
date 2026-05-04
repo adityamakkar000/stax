@@ -1509,15 +1509,6 @@ wheels = [
 ]
 
 [[package]]
-name = "orbax"
-version = "0.1.9"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "orbax-checkpoint" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/c7/78/0e144f12703c95d4495e9abc390c2f548ee9f24d2e487137108a921b1d81/orbax-0.1.9.tar.gz", hash = "sha256:42dd487ceef9fbf027f4720f3d041686af75120466a528a8a8141226bc197218", size = 1649, upload-time = "2023-09-06T20:43:02.819Z" }
-
-[[package]]
 name = "orbax-checkpoint"
 version = "0.11.33"
 source = { registry = "https://pypi.org/simple" }
@@ -2303,7 +2294,7 @@ dependencies = [
     { name = "jax" },
     { name = "jaxtyping" },
     { name = "loguru" },
-    { name = "orbax" },
+    { name = "orbax-checkpoint" },
     { name = "pre-commit" },
     { name = "ruff" },
     { name = "tensorboard" },
@@ -2318,7 +2309,7 @@ requires-dist = [
     { name = "jax", specifier = ">=0.6.2" },
     { name = "jaxtyping", specifier = ">=0.3.3" },
     { name = "loguru", specifier = ">=0.7.3" },
-    { name = "orbax", specifier = ">=0.1.9" },
+    { name = "orbax-checkpoint", specifier = ">=0.11.33" },
     { name = "pre-commit", specifier = ">=4.5.1" },
     { name = "ruff", specifier = ">=0.14.10" },
     { name = "tensorboard", specifier = ">=2.20.0" },
