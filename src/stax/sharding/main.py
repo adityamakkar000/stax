@@ -111,7 +111,7 @@ def get_sharding(mesh: Mesh, config: ShardingConfig) -> Shardings:
             if is_key(x):
                 return jax.device_put(x, replicate_sharding)
 
-            num_hosts = jax.process_count()
+            num_hosts = mesh.devices.size // jax.local_device_count()
             x_shape = (
                 *x.shape[: config.data_shard_dim],
                 x.shape[config.data_shard_dim] * num_hosts,
