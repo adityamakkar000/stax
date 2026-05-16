@@ -229,15 +229,13 @@ def init_distributed_jax():
     return
 
 
-def metrics_all_reduce(metrics: dict[str, float], mesh: jax.sharding.Mesh | None = None) -> dict[str, float]:
+def metrics_all_reduce(metrics: PyTree, mesh: jax.sharding.Mesh | None = None) -> PyTree:
     """All reduces metrics across hosts by averaging."""
-
-    for key, value in metrics.items():
-        all_gathered_val = process_allgather_over_mesh(jnp.array(value), tiled=True, mesh=mesh)
-        mean_val = jnp.mean(all_gathered_val)
-        metrics[key] = mean_val.item()
-    return metrics
-
+    gathered_vals = jax.tree.map(
+        lambda x: process_allgather_over_mesh(jnp.array(x), tiled=True, mesh=mesh).mean(),
+        metrics
+    )
+    return jax.tree.map(lambda x: x.item(), gathered_vals)
 
 def get_memory() -> tuple[float, float]:
     """
