@@ -30,7 +30,8 @@ def assert_equal(in_tree, mesh, fail_message: str = ""):
             x = np.asarray(x)
             if x.ndim == 0:
                 x = np.expand_dims(x, axis=0)
-            return np.concat([x] * jax.process_count())
+            n_processes = jax.process_count() if mesh is None else mesh.axis_sizes[0]
+            return np.concat([x] * n_processes)
 
     out = process_allgather_over_mesh(in_tree, True, mesh)
     expected_in_tree = jax.tree.map(concat_in_tree, in_tree)
