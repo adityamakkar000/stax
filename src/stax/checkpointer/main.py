@@ -77,7 +77,8 @@ class Checkpointer:
         self.options = ocp.CheckpointManagerOptions(
             max_to_keep=max_to_keep,
             multiprocessing_options=mp_options,
-            create=(active_processes is None)
+            create=(active_processes is None), 
+            save_root_metadata=False
         )
         self.checkpoint_manager = ocp.CheckpointManager(self.checkpoint_dir, options=self.options)
 
