@@ -12,7 +12,6 @@ from stax.multihost_utils import sync_over_mesh
 from stax.utils import get_rank
 
 flags.FLAGS.experimental_orbax_use_distributed_process_id = True
-ocp_multihost.initialize_distributed_to_device_ids()
 
 
 def to_abstract(x: Any) -> jax.ShapeDtypeStruct | int | float:
@@ -72,6 +71,7 @@ class Checkpointer:
         self.checkpoint_dir = output_dir
         mp_options = ocp.options.MultiprocessingOptions(primary_host=0, active_processes=active_processes)
         if active_processes is not None:
+            ocp_multihost.initialize_distributed_to_device_ids()
             assert train_mesh is not None, "train_mesh must be provided when active_processes is specified"
             rt_to_dist = ocp_multihost.runtime_to_distributed_ids()
             active_processes = {rt_to_dist[proc] for proc in active_processes}
