@@ -230,7 +230,7 @@ def init_distributed_jax():
         logger.info(f"\tDevice ID: {dev.id}, Platform: {dev.platform}, Kind: {dev.device_kind}")
     multihost_utils.sync_global_devices("init_distributed_jax")
 
-    ocp_multihost.initialize_distributed_to_device_ids()
+    ocp_multihost.initialize_runtime_to_distributed_ids()
     return
 
 
