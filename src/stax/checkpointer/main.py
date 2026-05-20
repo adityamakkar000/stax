@@ -8,6 +8,11 @@ from jaxtyping import PyTree
 from stax.logger import staxLogger as logger
 from stax.multihost_utils import sync_over_mesh
 from stax.utils import get_rank
+from absl import flags
+from orbax.checkpoint._src.multihost import multihost as ocp_multihost
+
+flags.FLAGS.experimental_orbax_use_dsitrbuted_process_id = True
+ocp_multihost.initialize_distributed_to_device_ids()
 
 
 def to_abstract(x: Any) -> jax.ShapeDtypeStruct | int | float:
@@ -68,6 +73,8 @@ class Checkpointer:
         mp_options = ocp.options.MultiprocessingOptions(primary_host=0, active_processes=active_processes)
         if active_processes is not None:
             assert train_mesh is not None, "train_mesh must be provided when active_processes is specified"
+            rt_to_dist = ocp_multihost.runtime_to_distributed_ids()
+            active_processes = {rt_to_dist[proc] for proc in active_processes}
             directory = epath.Path(output_dir)
             logger.info(f"Active processes for checkpointing: {active_processes}")
             if get_rank() == 0 and not directory.exists():
