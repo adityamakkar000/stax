@@ -2,16 +2,16 @@ from typing import Any, Optional
 
 import jax
 import orbax.checkpoint as ocp
+from absl import flags
 from etils import epath
 from jaxtyping import PyTree
+from orbax.checkpoint._src.multihost import multihost as ocp_multihost
 
 from stax.logger import staxLogger as logger
 from stax.multihost_utils import sync_over_mesh
 from stax.utils import get_rank
-from absl import flags
-from orbax.checkpoint._src.multihost import multihost as ocp_multihost
 
-flags.FLAGS.experimental_orbax_use_dsitrbuted_process_id = True
+flags.FLAGS.experimental_orbax_use_distributed_process_id = True
 ocp_multihost.initialize_distributed_to_device_ids()
 
 
