@@ -1,8 +1,10 @@
 import time
+from functools import lru_cache
 from types import TracebackType
 from typing import Any, Optional, Type
 
 import jax
+import jax._src.distributed as dist
 import jax.experimental.multihost_utils as multihost_utils
 import jax.numpy as jnp
 from jax import Array
@@ -200,13 +202,12 @@ def get_perf_func(trace_path, func: JitWrapped, *args, **kwargs) -> dict[str, Py
     logger.info(report)
     return out
 
-
+@lru_cache
 def get_rank() -> int:
     """Returns the current host index based on RANK environment variable."""
     if not jax.distributed.is_initialized():
         raise RuntimeError("JAX distributed environment is not initialized. Call init_distributed_jax() first.")
-    return jax.process_index()
-
+    return dist.global_state.process_id
 
 
 def init_distributed_jax():
