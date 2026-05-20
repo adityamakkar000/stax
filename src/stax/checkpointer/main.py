@@ -5,8 +5,9 @@ import orbax.checkpoint as ocp
 from etils import epath
 from jaxtyping import PyTree
 
-import stax
 from stax.logger import staxLogger as logger
+from stax.multihost_utils import sync_over_mesh
+from stax.utils import get_rank
 
 
 def to_abstract(x: Any) -> jax.ShapeDtypeStruct | int | float:
@@ -69,10 +70,10 @@ class Checkpointer:
             assert train_mesh is not None, "train_mesh must be provided when active_processes is specified"
             directory = epath.Path(output_dir)
             logger.info(f"Active processes for checkpointing: {active_processes}")
-            if jax.process_index() == 0 and not directory.exists():
+            if get_rank() == 0 and not directory.exists():
                 logger.info(f"Creating checkpoint directory at {directory}")
                 directory.mkdir(parents=True, exist_ok=True)
-            stax.sync_over_mesh("checkpoint_dir_sync", train_mesh)
+            sync_over_mesh("checkpoint_dir_sync", train_mesh)
             
         self.options = ocp.CheckpointManagerOptions(
             max_to_keep=max_to_keep,
