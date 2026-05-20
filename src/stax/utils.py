@@ -4,7 +4,6 @@ from types import TracebackType
 from typing import Any, Optional, Type
 
 import jax
-import jax._src.distributed as dist
 import jax.experimental.multihost_utils as multihost_utils
 import jax.numpy as jnp
 from jax import Array
@@ -207,7 +206,7 @@ def get_rank() -> int:
     """Returns the current host index based on RANK environment variable."""
     if not jax.distributed.is_initialized():
         raise RuntimeError("JAX distributed environment is not initialized. Call init_distributed_jax() first.")
-    return dist.global_state.process_id
+    return jax.process_index()
 
 
 def init_distributed_jax():
