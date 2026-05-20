@@ -6,15 +6,18 @@ from typing import Any, Optional, Type
 import jax
 import jax.experimental.multihost_utils as multihost_utils
 import jax.numpy as jnp
+from absl import flags
 from jax import Array
 from jax._src.pjit import JitWrapped
 from jax.stages import Compiled
 from jaxtyping import PRNGKeyArray, PyTree
+from orbax.checkpoint._src.multihost import multihost as ocp_multihost
 
 from stax.logger import staxLogger as logger
 
 from .multihost_utils import process_allgather_over_mesh
 
+flags.FLAGS.experimental_orbax_use_distributed_process_id = True
 
 class Tracker:
     """Context manager for tracking execution time and JAX profiler traces."""
@@ -226,6 +229,8 @@ def init_distributed_jax():
     for dev in all_devices:
         logger.info(f"\tDevice ID: {dev.id}, Platform: {dev.platform}, Kind: {dev.device_kind}")
     multihost_utils.sync_global_devices("init_distributed_jax")
+
+    ocp_multihost.initialize_distributed_to_device_ids()
     return
 
 
