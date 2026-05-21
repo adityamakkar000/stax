@@ -100,13 +100,14 @@ class Checkpointer:
 
             init_dist_ids()
             active_processes = {lookup_runtime_to_distributed(rt) for rt in active_processes}
+            logger.info(f"Initialized distributed process ID mapping for active processes: {active_processes}", log_for_all=True)
             directory = epath.Path(output_dir)
             logger.info(f"Active processes for checkpointing: {active_processes}")
             if get_rank() == 0 and not directory.exists():
                 logger.info(f"Creating checkpoint directory at {directory}")
                 directory.mkdir(parents=True, exist_ok=True)
             sync_over_mesh("checkpoint_dir_sync", train_mesh)
-            
+                
         self.options = ocp.CheckpointManagerOptions(
             max_to_keep=max_to_keep,
             multiprocessing_options=mp_options,
