@@ -1,3 +1,4 @@
+from ty_extensions import Unknown
 from sympy.simplify.fu import process_common_addends
 from typing import Any, Optional
 
@@ -18,30 +19,9 @@ def to_abstract(x: Any) -> jax.ShapeDtypeStruct | int | float:
         return x
     return ocp.utils.to_shape_dtype_struct(x)
 
-
-prefix = "stax_active_processes/"
-cache = dict()
-
-def lookup_runtime_to_distributed(rt: int):
-    if rt in cache:
-        return cache[rt]
-    client = dist.global_state.client
-    dist_id = client.blocking_key_value_get(f"{prefix}{rt}", 60 * 1000)
-    cache[rt] = int(dist_id)
-    return cache[rt]
-
 def init_dist_ids():
     ocp_multihost.use_experimental_distributed_process_id = lambda: True 
-    own_rt = jax.process_index()
-    own_dist = dist.global_state.process_id
-    client = dist.global_state.client 
-    client.key_value_set(
-        f"{prefix}{own_rt}",
-        str(own_dist), 
-        allow_overwrite=True
-    )
-    cache[own_rt] = own_dist
-
+    ocp_multihost.initialize_runtime_to_distributed_ids()
 
 class Checkpointer:
     """A helper class to manage saving and restoring checkpoints in JAX using Orbax.
@@ -96,7 +76,7 @@ class Checkpointer:
             assert train_mesh is not None, "train_mesh must be provided when active_processes is specified"
 
             init_dist_ids()
-            active_processes = {lookup_runtime_to_distributed(rt) for rt in active_processes}
+            active_processes = {ocp_multihost.runtime_to_distributed_process_id(rt) for rt in active_processes}
             logger.info(f"Initialized distributed process ID mapping for active processes: {active_processes}", log_for_all=True)
             directory = epath.Path(output_dir)
             logger.info(f"Active processes for checkpointing: {active_processes}")
