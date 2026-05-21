@@ -10,6 +10,7 @@ from jax import Array
 from jax._src.pjit import JitWrapped
 from jax.stages import Compiled
 from jaxtyping import PRNGKeyArray, PyTree
+from orbax.checkpoint._src.multihost import multihost as ocp_multihost
 
 from stax.logger import staxLogger as logger
 
@@ -226,6 +227,7 @@ def init_distributed_jax():
     for dev in all_devices:
         logger.info(f"\tDevice ID: {dev.id}, Platform: {dev.platform}, Kind: {dev.device_kind}")
     multihost_utils.sync_global_devices("init_distributed_jax")
+    ocp_multihost.initialize_runtime_to_distributed_ids()
     return
 
 

@@ -18,7 +18,7 @@ def to_abstract(x: Any) -> jax.ShapeDtypeStruct | int | float:
 
 def init_dist_ids():
     ocp_multihost.use_experimental_distributed_process_id = lambda: True 
-    ocp_multihost.initialize_runtime_to_distributed_ids()
+    
 
 class Checkpointer:
     """A helper class to manage saving and restoring checkpoints in JAX using Orbax.
