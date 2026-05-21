@@ -1,9 +1,9 @@
-from flax.core import apply
+from sympy.simplify.fu import process_common_addends
 from typing import Any, Optional
 
 import jax
+import jax._src.distributed as dist
 import orbax.checkpoint as ocp
-import orbax.checkpoint._src.multihost as ocp_multihost
 from etils import epath
 from jaxtyping import PyTree
 from orbax.checkpoint._src.multihost import multihost as ocp_multihost
@@ -11,8 +11,6 @@ from orbax.checkpoint._src.multihost import multihost as ocp_multihost
 from stax.logger import staxLogger as logger
 from stax.multihost_utils import sync_over_mesh
 from stax.utils import get_rank
-
-import jax._src.distributed as dist
 
 
 def to_abstract(x: Any) -> jax.ShapeDtypeStruct | int | float:
@@ -107,6 +105,11 @@ class Checkpointer:
                 logger.info(f"Creating checkpoint directory at {directory}")
                 directory.mkdir(parents=True, exist_ok=True)
             sync_over_mesh("checkpoint_dir_sync", train_mesh)
+
+        ocp_multihost.sync_global_processes(
+            "test_sync", 
+            processes=active_processes 
+        )
                 
         self.options = ocp.CheckpointManagerOptions(
             max_to_keep=max_to_keep,
