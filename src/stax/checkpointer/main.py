@@ -92,7 +92,6 @@ class Checkpointer:
 
         # latest checkpointer
         self.checkpoint_dir = output_dir
-        mp_options = ocp.options.MultiprocessingOptions(primary_host=0, active_processes=active_processes)
         if active_processes is not None:
             assert train_mesh is not None, "train_mesh must be provided when active_processes is specified"
 
@@ -106,11 +105,7 @@ class Checkpointer:
                 directory.mkdir(parents=True, exist_ok=True)
             sync_over_mesh("checkpoint_dir_sync", train_mesh)
 
-        ocp_multihost.sync_global_processes(
-            "test_sync", 
-            processes=active_processes 
-        )
-                
+        mp_options = ocp.options.MultiprocessingOptions(primary_host=0, active_processes=active_processes)
         self.options = ocp.CheckpointManagerOptions(
             max_to_keep=max_to_keep,
             multiprocessing_options=mp_options,
