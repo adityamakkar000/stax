@@ -1,7 +1,9 @@
+from flax.core import apply
 from typing import Any, Optional
 
 import jax
 import orbax.checkpoint as ocp
+import orbax.checkpoint._src.multihost as ocp_multihost
 from etils import epath
 from jaxtyping import PyTree
 from orbax.checkpoint._src.multihost import multihost as ocp_multihost
@@ -10,11 +12,37 @@ from stax.logger import staxLogger as logger
 from stax.multihost_utils import sync_over_mesh
 from stax.utils import get_rank
 
+import jax._src.distributed as dist
+
 
 def to_abstract(x: Any) -> jax.ShapeDtypeStruct | int | float:
     if isinstance(x, jax.ShapeDtypeStruct):
         return x
     return ocp.utils.to_shape_dtype_struct(x)
+
+
+prefix = "stax_active_processes/"
+cache = dict()
+
+def lookup_runtime_to_distributed(rt: int):
+    if rt in cache:
+        return cache[rt]
+    client = dist.global_state.client
+    dist_id = client.blocking_key_value_get(f"{prefix}{rt}", 100)
+    cache[rt] = int(dist_id)
+    return cache[rt]
+
+def init_dist_ids():
+    ocp_multihost.use_experimental_distributed_process_id = lambda: True 
+    own_rt = jax.process_index()
+    own_dist = dist.global_state.process_id
+    client = dist.global_state.client 
+    client.key_value_set(
+        f"{prefix}{own_rt}",
+        str(own_dist), 
+        allow_overwrite=True
+    )
+    cache[own_rt] = own_dist
 
 
 class Checkpointer:
@@ -68,10 +96,10 @@ class Checkpointer:
         self.checkpoint_dir = output_dir
         mp_options = ocp.options.MultiprocessingOptions(primary_host=0, active_processes=active_processes)
         if active_processes is not None:
-            
             assert train_mesh is not None, "train_mesh must be provided when active_processes is specified"
-            rt_to_dist = ocp_multihost.runtime_to_distributed_ids()
-            active_processes = {rt_to_dist[proc] for proc in active_processes}
+
+            init_dist_ids()
+            active_processes = {lookup_runtime_to_distributed(rt) for rt in active_processes}
             directory = epath.Path(output_dir)
             logger.info(f"Active processes for checkpointing: {active_processes}")
             if get_rank() == 0 and not directory.exists():
