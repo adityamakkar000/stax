@@ -28,7 +28,7 @@ def lookup_runtime_to_distributed(rt: int):
     if rt in cache:
         return cache[rt]
     client = dist.global_state.client
-    dist_id = client.blocking_key_value_get(f"{prefix}{rt}", 100)
+    dist_id = client.blocking_key_value_get(f"{prefix}{rt}", 60 * 1000)
     cache[rt] = int(dist_id)
     return cache[rt]
 
