@@ -71,7 +71,6 @@ class Checkpointer:
         self.checkpoint_dir = output_dir
         if active_processes is not None:
             assert train_mesh is not None, "train_mesh must be provided when active_processes is specified"
-
             init_dist_ids()
             active_processes = {ocp_multihost.runtime_to_distributed_process_id(rt) for rt in active_processes}
             logger.info(f"Initialized distributed process ID mapping for active processes: {active_processes}", log_for_all=True)

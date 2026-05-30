@@ -1,6 +1,4 @@
-from stax.checkpointer import (
-    Checkpointer,
-)
+from stax.checkpointer import Checkpoint, Checkpointer
 from stax.fn import (
     SingleStepFn,
     StepFn,
@@ -41,6 +39,7 @@ from stax.writer import (
 __all__ = [
     # checkpointer
     "Checkpointer",
+    "Checkpoint",
     # fn
     "StepFn",
     "SingleStepFn",
