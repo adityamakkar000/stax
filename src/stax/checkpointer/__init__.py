@@ -1,7 +1,7 @@
 from stax.checkpointer.main import Checkpointer
-from stax.checkpointer.old import Checkpoint
+from stax.checkpointer.old import OldCheckpointer
 
 __all__ = [
     "Checkpointer",
-    "Checkpoint",
+    "OldCheckpointer",
 ]
