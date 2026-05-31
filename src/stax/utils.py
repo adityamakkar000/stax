@@ -209,7 +209,6 @@ def get_rank() -> int:
         raise RuntimeError("JAX distributed environment is not initialized. Call init_distributed_jax() first.")
     return jax.process_index()
 
-
 def init_distributed_jax():
     """Initializes JAX distributed environment."""
     if jax.distributed.is_initialized():
