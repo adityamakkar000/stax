@@ -118,10 +118,8 @@ class OldCheckpointer:
 
         def _maybe_gather(x):
             if isinstance(x, jax.Array):
-                if x.is_fully_replicated:
-                    return x 
                 if x.is_fully_addressable:
-                    return jax.device_get(x) 
+                    return jax.device_get(x)
                 return process_allgather_over_mesh(x, tiled=True, mesh=self.train_mesh)
             return x
 
