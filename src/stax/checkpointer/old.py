@@ -2,6 +2,7 @@ import os
 import pickle
 import shutil
 import time
+from typing import Any
 
 import jax
 from etils import epath
@@ -143,12 +144,8 @@ class OldCheckpointer:
 
         path_name = f"{self.output_dir}{step}"
         checkpoint = Checkpoint(path_name)
-        data = checkpoint.load_as_dict()
+        data : dict[str, Any] = checkpoint.load_as_dict()['data']
         del checkpoint
-        if data is None:
-            logger.info(f"No checkpoint found at step {step}.")
-            return None
-        breakpoint()
         return data["checkpoint_data"], data["metadata"]
 
     @property
