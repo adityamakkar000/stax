@@ -115,12 +115,17 @@ class OldCheckpointer:
     def save(self, step: int, checkpoint_data: dict, metadata: dict | None = None):        
         """Save a checkpoint."""
 
-        checkpoint_data = process_allgather_over_mesh(
-            checkpoint_data, 
-            tiled=True, 
-            mesh=self.train_mesh
-        )
 
+        def _maybe_gather(x):
+            if isinstance(x, jax.Array):
+                if x.is_fully_replicated:
+                    return x 
+                if x.is_fully_addressable:
+                    return jax.device_get(x) 
+                return process_allgather_over_mesh(x, tiled=True, mesh=self.train_mesh)
+            return x
+
+        checkpoint_data =  jax.tree.map(_maybe_gather, checkpoint_data)
         data = {
             "checkpoint_data": checkpoint_data,
             "metadata": metadata or {},
