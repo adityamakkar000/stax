@@ -1,6 +1,4 @@
-from stax.checkpointer import (
-    Checkpointer,
-)
+from stax.checkpointer import Checkpointer, OldCheckpointer
 from stax.fn import (
     SingleStepFn,
     StepFn,
@@ -13,6 +11,7 @@ from stax.model_module import (
     HFModelBase,
     modelBase,
 )
+from stax.multihost_utils import process_allgather_over_mesh, sync_over_mesh
 from stax.sharding import (
     ShardingConfig,
     Shardings,
@@ -25,7 +24,6 @@ from stax.utils import (
     estimate_compile_stats,
     get_memory,
     get_perf_func,
-    get_primary_host,
     get_rank,
     init_distributed_jax,
     is_key,
@@ -41,6 +39,7 @@ from stax.writer import (
 __all__ = [
     # checkpointer
     "Checkpointer",
+    "OldCheckpointer",
     # fn
     "StepFn",
     "SingleStepFn",
@@ -55,7 +54,6 @@ __all__ = [
     "estimate_compile_stats",
     "reshape_batch_key",
     "init_distributed_jax",
-    "get_primary_host",
     "get_rank",
     "get_memory",
     # writer
@@ -73,6 +71,9 @@ __all__ = [
     # model_module
     "HFModelBase",
     "modelBase",
+    # multihost_utils
+    "sync_over_mesh",
+    "process_allgather_over_mesh",
 ]
 
 __version__ = "0.1.0"

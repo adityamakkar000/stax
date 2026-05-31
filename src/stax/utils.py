@@ -1,5 +1,5 @@
-import os
 import time
+from functools import lru_cache
 from types import TracebackType
 from typing import Any, Optional, Type
 
@@ -9,9 +9,12 @@ import jax.numpy as jnp
 from jax import Array
 from jax._src.pjit import JitWrapped
 from jax.stages import Compiled
-from jaxtyping import PRNGKeyArray
+from jaxtyping import PRNGKeyArray, PyTree
+from orbax.checkpoint._src.multihost import multihost as ocp_multihost
 
 from stax.logger import staxLogger as logger
+
+from .multihost_utils import process_allgather_over_mesh
 
 
 class Tracker:
@@ -26,7 +29,7 @@ class Tracker:
 
         """
         self.timer = timer
-        self.trace = trace
+        self.trace = trace if (get_rank() == 0) else None
         self.profiling = False
         self.data: dict[str, float] = {}
         self.start: float = 0.0
@@ -161,7 +164,7 @@ def reshape_key_into_array(key: PRNGKeyArray, num_keys: int) -> Array:
     return keys
 
 
-def get_perf_func(trace_path, func: JitWrapped, *args, **kwargs) -> None:
+def get_perf_func(trace_path, func: JitWrapped, *args, **kwargs) -> dict[str, PyTree]:
     """Profiles the performance of a JAX function, logging memory usage and execution time.
 
     Args:
@@ -197,23 +200,17 @@ def get_perf_func(trace_path, func: JitWrapped, *args, **kwargs) -> None:
         "=================================================="
     )
     logger.info(report)
+    return out
 
-
+@lru_cache
 def get_rank() -> int:
     """Returns the current host index based on RANK environment variable."""
-    if os.environ.get("RANK", None) is None:
-        raise ValueError("JAX distributed got no RANK env variable")
-    return int(os.environ["RANK"])
-
-
-def get_primary_host() -> int:
-    """Returns the primary host index based on RANK environment variable."""
-    return multihost_utils.broadcast_one_to_all(jax.process_index(), is_source=(get_rank() == 0)).item()
-
+    if not jax.distributed.is_initialized():
+        raise RuntimeError("JAX distributed environment is not initialized. Call init_distributed_jax() first.")
+    return jax.process_index()
 
 def init_distributed_jax():
     """Initializes JAX distributed environment."""
-    get_rank()  # Validate RANK is set
     if jax.distributed.is_initialized():
         logger.warning("JAX distributed is already initialized")
         return
@@ -229,18 +226,17 @@ def init_distributed_jax():
     for dev in all_devices:
         logger.info(f"\tDevice ID: {dev.id}, Platform: {dev.platform}, Kind: {dev.device_kind}")
     multihost_utils.sync_global_devices("init_distributed_jax")
+    ocp_multihost.initialize_runtime_to_distributed_ids()
     return
 
 
-def metrics_all_reduce(metrics: dict[str, float]) -> dict[str, float]:
+def metrics_all_reduce(metrics: PyTree, mesh: jax.sharding.Mesh | None = None) -> PyTree:
     """All reduces metrics across hosts by averaging."""
-
-    for key, value in metrics.items():
-        all_gathered_val = multihost_utils.process_allgather(jnp.array(value), tiled=True)
-        mean_val = jnp.mean(all_gathered_val)
-        metrics[key] = mean_val.item()
-    return metrics
-
+    gathered_vals = jax.tree.map(
+        lambda x: process_allgather_over_mesh(jnp.array(x), tiled=True, mesh=mesh).mean(),
+        metrics
+    )
+    return jax.tree.map(lambda x: x.item(), gathered_vals)
 
 def get_memory() -> tuple[float, float]:
     """

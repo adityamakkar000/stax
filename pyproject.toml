@@ -12,15 +12,17 @@ authors = [
 requires-python = ">=3.11"
 
 dependencies = [
+    "etils[epath]>=1.14.0",
     "flax>=0.11.0",
     "jax>=0.6.2",
     "jaxtyping>=0.3.3",
     "loguru>=0.7.3",
-    "orbax>=0.1.9",
+    "orbax-checkpoint>=0.11.36",
     "pre-commit>=4.5.1",
     "ruff>=0.14.10",
     "tensorboard>=2.20.0",
     "tensorboard-plugin-profile>=2.21.3",
+    "tensorflow>=2.21.0",
     "wandb>=0.22.3",
 ]
 

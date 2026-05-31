@@ -1,18 +1,21 @@
-import os
-
-from loguru import logger
-
-RANK = int(r) if (r := os.environ.get("RANK", None)) is not None else r
+import jax
+from absl import logging
 
 
-class FakeLogger:
-    def debug(self, msg, *args, **kwargs): ...
-    def info(self, msg, *args, **kwargs): ...
-    def warning(self, msg, *args, **kwargs): ...
-    def error(self, msg, *args, **kwargs): ...
-    def critical(self, msg, *args, **kwargs): ...
+class Logger:
 
+    def info(self, *args, log_for_all=False):
+        if log_for_all or self.should_log:
+            logging.info(*args, stacklevel=2)
+    
+    def warning(self, *args, log_for_all=False):
+        if log_for_all or self.should_log:
+            logging.warning(*args, stacklevel=2)
 
-staxLogger = logger if (RANK == 0) else FakeLogger()
+    @property
+    def should_log(self):
+        return jax.process_index() == 0
+
+staxLogger = Logger()
 
 __all__ = ["staxLogger"]

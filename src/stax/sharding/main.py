@@ -54,6 +54,7 @@ class Shardings:
     opt_state_sharding: PyTree[NamedSharding]
     metrics_sharding: NamedSharding
     shard_data: Callable[[PyTree], PyTree]
+    mesh: jax.sharding.Mesh
 
 
 def setup_mesh(devices: np.ndarray | None = None):
@@ -110,7 +111,7 @@ def get_sharding(mesh: Mesh, config: ShardingConfig) -> Shardings:
             if is_key(x):
                 return jax.device_put(x, replicate_sharding)
 
-            num_hosts = jax.process_count()
+            num_hosts = mesh.devices.size // jax.local_device_count()
             x_shape = (
                 *x.shape[: config.data_shard_dim],
                 x.shape[config.data_shard_dim] * num_hosts,
@@ -123,4 +124,4 @@ def get_sharding(mesh: Mesh, config: ShardingConfig) -> Shardings:
     if config.opt_state_offload:
         opt_state_sharding = jax.tree.map(lambda x: x.with_memory_kind("pinned_host"), opt_state_sharding)
 
-    return Shardings(param_sharding, opt_state_sharding, metrics_sharding, shard_data)
+    return Shardings(param_sharding, opt_state_sharding, metrics_sharding, shard_data, mesh)
