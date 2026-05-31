@@ -135,6 +135,8 @@ class OldCheckpointer:
             checkpoint.data = data
             checkpoint.save()
             del checkpoint
+        
+        self._maybe_delete_old_checkpoints()
 
         sync_over_mesh("checkpoint_save_sync", self.train_mesh)
 
@@ -150,6 +152,16 @@ class OldCheckpointer:
         data : dict[str, Any] = checkpoint.load_as_dict()['data']
         del checkpoint
         return data["checkpoint_data"], data["metadata"]
+
+    def _maybe_delete_old_checkpoints(self):
+        if self.rank == 0:
+            files = [f for f in self.directory.iterdir() if f.is_file()]
+            files = sorted(files, key=lambda x: int(x.name))
+            if len(files) > self.max_to_keep:
+                to_delete = files[:-self.max_to_keep]
+                for f in to_delete:
+                    logger.info(f"Deleting old checkpoint: {f}")
+                    f.unlink()
 
     @property
     def latest_step(self) -> int | None:
