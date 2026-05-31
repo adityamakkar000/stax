@@ -48,6 +48,7 @@ class Checkpoint:
         self._save(filename, keys)
 
     def _save(self, filename, keys):
+        start_time = time.time()
         keys = tuple(self._values.keys() if keys is None else keys)
         assert all([not k.startswith('_') for k in keys]), keys
         data = self._values
@@ -64,7 +65,8 @@ class Checkpoint:
             with open(tmp, 'wb') as f:
                 f.write(content)
             shutil.move(tmp, filename)
-        logger.info('Wrote checkpoint.')
+        elapsed = time.time() - start_time
+        logger.info(f'Wrote checkpoint in {elapsed:.3f}s.')
 
     def load_as_dict(self, filename=None):
         assert self._filename or filename
@@ -146,6 +148,7 @@ class OldCheckpointer:
         if data is None:
             logger.info(f"No checkpoint found at step {step}.")
             return None
+        breakpoint()
         return data["checkpoint_data"], data["metadata"]
 
     @property
