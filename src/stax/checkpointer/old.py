@@ -41,12 +41,6 @@ class Checkpoint:
         except AttributeError:
             raise ValueError(name)
         
-    def set_model(self, model):
-        for key in model.__dict__.keys():
-            data = getattr(model, key)
-            if hasattr(data, 'save') or key == 'config':
-                self._values[key] = getattr(model, key)
-
     def save(self, filename=None, keys=None):
         assert self._filename or filename
         filename = filename or self._filename
@@ -83,17 +77,9 @@ class Checkpoint:
             with open(filename, 'rb') as f:
                 data = pickle.loads(f.read())
         age = time.time() - data['_timestamp']
-        print(f'Loaded checkpoint from {age:.0f} seconds ago.')
+        logger.info(f'Loaded checkpoint from {age:.0f} seconds ago.')
         return data
     
-    def load_model(self, model, filename=None):
-        cp_dict = self.load_as_dict()
-        replace_dict = {}
-        for key in model.__dict__.keys():
-            if key in cp_dict and key != 'config':
-                replace_dict[key] = getattr(model, key).load(cp_dict[key])
-        return model.replace(**replace_dict)
-
 class OldCheckpointer:
     def __init__(
         self,
@@ -112,9 +98,11 @@ class OldCheckpointer:
             raise AssertionError("output_dir must be a valid GCS path starting with gs")
 
         self.output_dir = output_dir
+        if not self.output_dir.endswith('/'):
+            self.output_dir = self.output_dir + '/'
         self.max_to_keep = max_to_keep
         self.train_mesh = train_mesh
-        self.directory = epath.Path(output_dir)
+        self.directory = epath.Path(self.output_dir)
         self.rank = get_rank()
 
         if self.rank == 0 and not self.directory.exists():
@@ -136,7 +124,7 @@ class OldCheckpointer:
         }
 
         if self.rank == 0:
-            filename = f"{self.output_dir}/{step}"
+            filename = f"{self.output_dir}{step}"
             checkpoint = Checkpoint(filename)
             checkpoint.data = data
             checkpoint.save()
@@ -151,7 +139,7 @@ class OldCheckpointer:
                 logger.info("No checkpoint found to restore.")
                 return None
 
-        path_name = f"{self.output_dir}/{step}"
+        path_name = f"{self.output_dir}{step}"
         checkpoint = Checkpoint(path_name)
         data = checkpoint.load_as_dict()
         del checkpoint
