@@ -54,10 +54,9 @@ class Checkpoint:
         data['_timestamp'] = time.time()
         content = pickle.dumps(data)
         if 'gs://' in filename:
-            import tensorflow as tf
-            tf.io.gfile.makedirs(parent_dir(filename))
-            with tf.io.gfile.GFile(filename, 'wb') as f:
-                f.write(content)
+            p = epath.Path(filename)
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_bytes(content)
         else:
             os.makedirs(filename, exist_ok=True)
             tmp = parent_dir(filename) + '/' + name(filename) + '.tmp'

@@ -22,7 +22,6 @@ dependencies = [
     "ruff>=0.14.10",
     "tensorboard>=2.20.0",
     "tensorboard-plugin-profile>=2.21.3",
-    "tensorflow>=2.21.0",
     "wandb>=0.22.3",
 ]
 
