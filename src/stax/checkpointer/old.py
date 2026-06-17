@@ -6,13 +6,16 @@ import time
 from typing import Any
 
 import jax
+import tensorflow as tf
 from etils import epath
+
+tf.config.set_visible_devices([], 'TPU')
+tf.config.set_visible_devices([], 'GPU')
 
 from stax.logger import staxLogger as logger
 from stax.multihost_utils import process_allgather_over_mesh, sync_over_mesh
 from stax.utils import get_rank
 
-# Simple checkpointer inspired by https://github.com/danijar/elements/blob/main/elements/checkpoint.py
 
 def parent_dir(filename):
     return filename.rsplit('/', 1)[0]
@@ -52,17 +55,22 @@ class Checkpoint:
         assert all([not k.startswith('_') for k in keys]), keys
         data = self._values
         data['_timestamp'] = time.time()
-        content = pickle.dumps(data)
+        
         if 'gs://' in filename:
-            p = epath.Path(filename)
-            p.parent.mkdir(parents=True, exist_ok=True)
-            p.write_bytes(content)
+            tf.io.gfile.makedirs(parent_dir(filename))
+            tmp_local = '/tmp/' + name(filename) + '.tmp'
+            with open(tmp_local, 'wb') as f:
+                pickle.dump(data, f)
+            
+            tf.io.gfile.copy(tmp_local, filename, overwrite=True)
+            os.remove(tmp_local)
         else:
             os.makedirs(filename, exist_ok=True)
             tmp = parent_dir(filename) + '/' + name(filename) + '.tmp'
             with open(tmp, 'wb') as f:
-                f.write(content)
+                pickle.dump(data, f)
             shutil.move(tmp, filename)
+            
         elapsed = time.time() - start_time
         logger.info(f'Wrote checkpoint in {elapsed:.3f}s.')
 
@@ -70,7 +78,6 @@ class Checkpoint:
         assert self._filename or filename
         filename = filename or self._filename
         if 'gs://' in filename:
-            import tensorflow as tf
             with tf.io.gfile.GFile(filename, 'rb') as f:
                 data = pickle.loads(f.read())
         else:
@@ -79,7 +86,6 @@ class Checkpoint:
         age = time.time() - data['_timestamp']
         logger.info(f'Loaded checkpoint from {age:.0f} seconds ago.')
         return data
-
 
 class OldCheckpointer:
     def __init__(
