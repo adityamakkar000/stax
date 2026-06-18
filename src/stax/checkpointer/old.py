@@ -1,20 +1,16 @@
 import os
 import pickle
 import shutil
-import threading
 import time
 from typing import Any
 
 import jax
 import tensorflow as tf
-from etils import epath
 
 tf.config.set_visible_devices([], 'TPU')
 tf.config.set_visible_devices([], 'GPU')
 
 from stax.logger import staxLogger as logger
-from stax.multihost_utils import process_allgather_over_mesh, sync_over_mesh
-from stax.utils import get_rank
 
 
 def parent_dir(filename):
@@ -46,45 +42,107 @@ class Checkpoint:
     def save(self, filename=None, keys=None):
         assert self._filename or filename
         filename = filename or self._filename
-        logger.info(f'Writing checkpoint: {filename}')
+        logger.info(f'Writing chunked checkpoint to directory: {filename}')
         self._save(filename, keys)
 
     def _save(self, filename, keys):
         start_time = time.time()
         keys = tuple(self._values.keys() if keys is None else keys)
         assert all([not k.startswith('_') for k in keys]), keys
+        
         data = self._values
         data['_timestamp'] = time.time()
         
+        flat_data, treedef = jax.tree_util.tree_flatten(data)
+        
+        chunk_idx = 0
+        current_chunk = []
+        current_size = 0
+        # store 5GB chunks
+        MAX_CHUNK_BYTES = 5 * 1024**3
+        
         if 'gs://' in filename:
-            tf.io.gfile.makedirs(parent_dir(filename))
-            tmp_local = '/tmp/' + name(filename) + '.tmp'
-            with open(tmp_local, 'wb') as f:
-                pickle.dump(data, f)
-            
-            tf.io.gfile.copy(tmp_local, filename, overwrite=True)
-            os.remove(tmp_local)
+            tf.io.gfile.makedirs(filename)
         else:
             os.makedirs(filename, exist_ok=True)
-            tmp = parent_dir(filename) + '/' + name(filename) + '.tmp'
-            with open(tmp, 'wb') as f:
-                pickle.dump(data, f)
-            shutil.move(tmp, filename)
             
+        for item in flat_data:
+            item_size = getattr(item, 'nbytes', 8) 
+            
+            if current_size + item_size > MAX_CHUNK_BYTES and current_chunk:
+                self._write_and_upload_chunk(filename, chunk_idx, current_chunk)
+                chunk_idx += 1
+                current_chunk = []
+                current_size = 0
+                
+            current_chunk.append(item)
+            current_size += item_size
+            
+        if current_chunk:
+            self._write_and_upload_chunk(filename, chunk_idx, current_chunk)
+            
+        treedef_path = f"{filename}/treedef.pkl"
+        if 'gs://' in filename:
+            with tf.io.gfile.GFile(treedef_path, 'wb') as f:
+                pickle.dump(treedef, f)
+        else:
+            with open(treedef_path, 'wb') as f:
+                pickle.dump(treedef, f)
+
         elapsed = time.time() - start_time
-        logger.info(f'Wrote checkpoint in {elapsed:.3f}s.')
+        logger.info(f'Successfully wrote chunked checkpoint in {elapsed:.3f}s.')
+
+    def _write_and_upload_chunk(self, base_dir, chunk_idx, chunk_data):
+        logger.info(f"Processing chunk {chunk_idx}...")
+        tmp_local = f"/tmp/chunk_{chunk_idx}.pkl"
+        
+        with open(tmp_local, 'wb') as f:
+            pickle.dump(chunk_data, f, protocol=pickle.HIGHEST_PROTOCOL)
+            
+        dest_path = f"{base_dir}/chunk_{chunk_idx}.pkl"
+        
+        if 'gs://' in base_dir:
+            tf.io.gfile.copy(tmp_local, dest_path, overwrite=True)
+            os.remove(tmp_local) 
+        else:
+            shutil.move(tmp_local, dest_path)
 
     def load_as_dict(self, filename=None):
         assert self._filename or filename
         filename = filename or self._filename
+        
+        treedef_path = f"{filename}/treedef.pkl"
         if 'gs://' in filename:
-            with tf.io.gfile.GFile(filename, 'rb') as f:
-                data = pickle.loads(f.read())
+            with tf.io.gfile.GFile(treedef_path, 'rb') as f:
+                treedef = pickle.loads(f.read())
         else:
-            with open(filename, 'rb') as f:
-                data = pickle.loads(f.read())
-        age = time.time() - data['_timestamp']
-        logger.info(f'Loaded checkpoint from {age:.0f} seconds ago.')
+            with open(treedef_path, 'rb') as f:
+                treedef = pickle.loads(f.read())
+                
+        flat_data = []
+        chunk_idx = 0
+        while True:
+            chunk_path = f"{filename}/chunk_{chunk_idx}.pkl"
+            
+            if 'gs://' in filename:
+                if not tf.io.gfile.exists(chunk_path):
+                    break
+                logger.info(f"Loading {chunk_path}...")
+                with tf.io.gfile.GFile(chunk_path, 'rb') as f:
+                    flat_data.extend(pickle.loads(f.read()))
+            else:
+                if not os.path.exists(chunk_path):
+                    break
+                logger.info(f"Loading {chunk_path}...")
+                with open(chunk_path, 'rb') as f:
+                    flat_data.extend(pickle.loads(f.read()))
+                    
+            chunk_idx += 1
+            
+        data = jax.tree_util.tree_unflatten(treedef, flat_data)
+        
+        age = time.time() - data.get('_timestamp', time.time())
+        logger.info(f'Loaded chunked checkpoint from {age:.0f} seconds ago.')
         return data
 
 class OldCheckpointer:
