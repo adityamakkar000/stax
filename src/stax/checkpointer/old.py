@@ -1,6 +1,8 @@
+import asyncio
 import os
 import pickle
 import shutil
+import tempfile
 import threading
 import time
 from typing import Any
@@ -40,9 +42,9 @@ class Checkpoint:
             raise AttributeError(name)
         try:
             return self._values[name]
-        except AttributeError:
+        except KeyError:
             raise ValueError(name)
-        
+
     def save(self, filename=None, keys=None):
         assert self._filename or filename
         filename = filename or self._filename
@@ -53,101 +55,147 @@ class Checkpoint:
         start_time = time.time()
         keys = tuple(self._values.keys() if keys is None else keys)
         assert all([not k.startswith('_') for k in keys]), keys
-        
-        data = self._values
+        data = {k: self._values[k] for k in keys}
         data['_timestamp'] = time.time()
-        
+
         flat_data, treedef = jax.tree_util.tree_flatten(data)
-        
-        chunk_idx = 0
-        current_chunk = []
-        current_size = 0
-        # store 5GB chunks
-        MAX_CHUNK_BYTES = 5 * 1024**3
-        
+
+        check_dir = "/tmp" if 'gs://' in filename else filename
+        if 'gs://' not in filename:
+            os.makedirs(filename, exist_ok=True)
+
+        free_space = shutil.disk_usage(check_dir).free
+        allowed_storage = max(free_space * 0.25, 5 * 1024**3)
+        max_concurrent_chunks = max(1, min(4, int(allowed_storage / (1024**3))))
+        logger.info(f"Allowed storage: {allowed_storage / 1024**3:.2f}GB. Limiting concurrency to {max_concurrent_chunks} chunks.")
+
         if 'gs://' in filename:
             tf.io.gfile.makedirs(filename)
-        else:
-            os.makedirs(filename, exist_ok=True)
-            
-        for item in flat_data:
-            item_size = getattr(item, 'nbytes', 8) 
-            
-            if current_size + item_size > MAX_CHUNK_BYTES and current_chunk:
-                self._write_and_upload_chunk(filename, chunk_idx, current_chunk)
-                chunk_idx += 1
-                current_chunk = []
-                current_size = 0
-                
-            current_chunk.append(item)
-            current_size += item_size
-            
-        if current_chunk:
-            self._write_and_upload_chunk(filename, chunk_idx, current_chunk)
-            
-        treedef_path = f"{filename}/treedef.pkl"
-        if 'gs://' in filename:
-            with tf.io.gfile.GFile(treedef_path, 'wb') as f:
-                pickle.dump(treedef, f)
-        else:
-            with open(treedef_path, 'wb') as f:
-                pickle.dump(treedef, f)
+
+        async def _upload_all_chunks():
+            sem = asyncio.Semaphore(max_concurrent_chunks)
+
+            async def sem_worker(func, *args):
+                async with sem:
+                    return await asyncio.to_thread(func, *args)
+
+            chunk_idx = 0
+            current_chunk = []
+            current_size = 0
+            MAX_CHUNK_BYTES = 1 * 1024**3
+            tasks = []
+
+            for item in flat_data:
+                item_size = getattr(item, 'nbytes', 8)
+
+                if current_size + item_size > MAX_CHUNK_BYTES and current_chunk:
+                    tasks.append(sem_worker(
+                        self._write_and_upload_chunk, filename, chunk_idx, current_chunk
+                    ))
+                    chunk_idx += 1
+                    current_chunk = []
+                    current_size = 0
+
+                current_chunk.append(item)
+                current_size += item_size
+
+            if current_chunk:
+                tasks.append(sem_worker(
+                    self._write_and_upload_chunk, filename, chunk_idx, current_chunk
+                ))
+
+            def _write_treedef():
+                treedef_path = f"{filename}/treedef.pkl"
+                if 'gs://' in filename:
+                    with tf.io.gfile.GFile(treedef_path, 'wb') as f:
+                        pickle.dump(treedef, f)
+                else:
+                    with open(treedef_path, 'wb') as f:
+                        pickle.dump(treedef, f)
+
+            tasks.append(asyncio.to_thread(_write_treedef))
+
+            await asyncio.gather(*tasks)
+
+        asyncio.run(_upload_all_chunks())
 
         elapsed = time.time() - start_time
-        logger.info(f'Successfully wrote chunked checkpoint in {elapsed:.3f}s.')
+        logger.info(f'Successfully wrote chunked checkpoint asynchronously in {elapsed:.3f}s.')
 
     def _write_and_upload_chunk(self, base_dir, chunk_idx, chunk_data):
         logger.info(f"Processing chunk {chunk_idx}...")
-        tmp_local = f"/tmp/chunk_{chunk_idx}.pkl"
-        
-        with open(tmp_local, 'wb') as f:
+        fd, tmp_local = tempfile.mkstemp(prefix=f"chunk_{chunk_idx}_", suffix=".pkl", dir="/tmp")
+        if os.path.exists(tmp_local):
+            os.remove(tmp_local)
+        with os.fdopen(fd, 'wb') as f:
             pickle.dump(chunk_data, f, protocol=pickle.HIGHEST_PROTOCOL)
-            
         dest_path = f"{base_dir}/chunk_{chunk_idx}.pkl"
-        
         if 'gs://' in base_dir:
             tf.io.gfile.copy(tmp_local, dest_path, overwrite=True)
-            os.remove(tmp_local) 
         else:
             shutil.move(tmp_local, dest_path)
+        os.remove(tmp_local)
 
-    def load_as_dict(self, filename=None):
+    def load_as_dict(self, filename=None, max_concurrent_chunks: int = 4):
         assert self._filename or filename
         filename = filename or self._filename
-        
-        treedef_path = f"{filename}/treedef.pkl"
-        if 'gs://' in filename:
-            with tf.io.gfile.GFile(treedef_path, 'rb') as f:
-                treedef = pickle.loads(f.read())
-        else:
-            with open(treedef_path, 'rb') as f:
-                treedef = pickle.loads(f.read())
-                
-        flat_data = []
-        chunk_idx = 0
-        while True:
-            chunk_path = f"{filename}/chunk_{chunk_idx}.pkl"
-            
-            if 'gs://' in filename:
-                if not tf.io.gfile.exists(chunk_path):
-                    break
-                logger.info(f"Loading {chunk_path}...")
-                with tf.io.gfile.GFile(chunk_path, 'rb') as f:
-                    flat_data.extend(pickle.loads(f.read()))
+        logger.info(f'Reading chunked checkpoint from directory: {filename}')
+        return asyncio.run(self._load_as_dict_async(filename, max_concurrent_chunks))
+
+    async def _load_as_dict_async(self, filename, max_concurrent_chunks):
+        is_gcs = 'gs://' in filename
+
+        def _read_bytes(path):
+            if is_gcs:
+                with tf.io.gfile.GFile(path, 'rb') as f:
+                    return f.read()
             else:
-                if not os.path.exists(chunk_path):
-                    break
-                logger.info(f"Loading {chunk_path}...")
-                with open(chunk_path, 'rb') as f:
-                    flat_data.extend(pickle.loads(f.read()))
-                    
-            chunk_idx += 1
-            
-        data = jax.tree_util.tree_unflatten(treedef, flat_data)
+                with open(path, 'rb') as f:
+                    return f.read()
+
+        # first load the tree metadata blocking
+        treedef_path = f"{filename}/treedef.pkl"
+        treedef = pickle.loads(await asyncio.to_thread(_read_bytes, treedef_path))
+
         
+        def _list_chunk_indices():
+            entries = tf.io.gfile.listdir(filename) if is_gcs else os.listdir(filename)
+            indices = []
+            for entry in entries:
+                stripped = entry.rstrip('/')
+                if stripped.startswith('chunk_') and stripped.endswith('.pkl'):
+                    indices.append(int(stripped[len('chunk_'):-len('.pkl')]))
+            return sorted(indices)
+
+        chunk_indices = await asyncio.to_thread(_list_chunk_indices)
+        if chunk_indices != list(range(len(chunk_indices))):
+            raise ValueError(
+                f"Checkpoint at {filename} has missing/unexpected chunks; "
+                f"found indices {chunk_indices}, expected a contiguous range "
+                f"starting at 0."
+            )
+
+        sem = asyncio.Semaphore(max(1, max_concurrent_chunks))
+
+        async def _load_chunk(chunk_idx):
+            chunk_path = f"{filename}/chunk_{chunk_idx}.pkl"
+            async with sem:
+                logger.info(f"Loading {chunk_path}...")
+                raw = await asyncio.to_thread(_read_bytes, chunk_path)
+                return pickle.loads(raw)
+        
+        chunks = await asyncio.gather(*[_load_chunk(idx) for idx in chunk_indices])
+
+        flat_data = []
+        for chunk in chunks:
+            flat_data.extend(chunk)
+
+        data = jax.tree_util.tree_unflatten(treedef, flat_data)
+
         age = time.time() - data.get('_timestamp', time.time())
         logger.info(f'Loaded chunked checkpoint from {age:.0f} seconds ago.')
         return data
+
 class OldCheckpointer:
     def __init__(
         self,
@@ -207,7 +255,7 @@ class OldCheckpointer:
 
         sync_over_mesh("checkpoint_save_sync", self.train_mesh)
 
-    def restore(self, *, step: int | None = None):        
+    def restore(self, *, step: int | None = None):
         if step is None:
             step = self.latest_step
             if step is None:
@@ -228,7 +276,7 @@ class OldCheckpointer:
                 to_delete = dirs[:-self.max_to_keep]
                 for d in to_delete:
                     logger.info(f"Deleting old checkpoint directory: {d}")
-                    d.rmtree()  
+                    d.rmtree()
 
     @property
     def latest_step(self) -> int | None:
@@ -237,7 +285,6 @@ class OldCheckpointer:
             return None
         dirs = [f for f in self.directory.iterdir() if f.is_dir() and f.name.isdigit()]
         dirs = sorted(dirs, key=lambda x: int(x.name))
-        
         if not dirs:
             return None
         return int(dirs[-1].name)
