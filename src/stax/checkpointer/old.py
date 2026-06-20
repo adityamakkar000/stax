@@ -90,7 +90,7 @@ class Checkpoint:
 
                 if current_size + item_size > MAX_CHUNK_BYTES and current_chunk:
                     tasks.append(sem_worker(
-                        self._write_and_upload_chunk, filename, chunk_idx, current_chunk
+                        self._write_and_upload_chunk, filename, chunk_idx, current_chunk, len(flat_data)
                     ))
                     chunk_idx += 1
                     current_chunk = []
@@ -122,17 +122,19 @@ class Checkpoint:
         elapsed = time.time() - start_time
         logger.info(f'Successfully wrote chunked checkpoint asynchronously in {elapsed:.3f}s.')
 
-    def _write_and_upload_chunk(self, base_dir, chunk_idx, chunk_data):
-        logger.info(f"Processing chunk {chunk_idx}...")
+    def _write_and_upload_chunk(self, base_dir, chunk_idx, chunk_data, total_chunks):
+        logger.info(f"Processing chunk {chunk_idx}/{total_chunks}...")
         fd, tmp_local = tempfile.mkstemp(prefix=f"chunk_{chunk_idx}_", suffix=".pkl", dir="/tmp")
-        with os.fdopen(fd, 'wb') as f:
-            pickle.dump(chunk_data, f, protocol=pickle.HIGHEST_PROTOCOL)
-        dest_path = f"{base_dir}/chunk_{chunk_idx}.pkl"
-        if 'gs://' in base_dir:
-            tf.io.gfile.copy(tmp_local, dest_path, overwrite=True)
-        else:
-            shutil.move(tmp_local, dest_path)
-        os.remove(tmp_local)
+        try:
+            with os.fdopen(fd, 'wb') as f:
+                pickle.dump(chunk_data, f, protocol=pickle.HIGHEST_PROTOCOL)
+            dest_path = f"{base_dir}/chunk_{chunk_idx}.pkl"
+            if 'gs://' in base_dir:
+                tf.io.gfile.copy(tmp_local, dest_path, overwrite=True)
+            else:
+                shutil.move(tmp_local, dest_path)
+        finally:
+            os.remove(tmp_local)
 
     def load_as_dict(self, filename=None, max_concurrent_chunks: int = 4):
         assert self._filename or filename
