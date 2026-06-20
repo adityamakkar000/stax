@@ -148,7 +148,6 @@ class Checkpoint:
         age = time.time() - data.get('_timestamp', time.time())
         logger.info(f'Loaded chunked checkpoint from {age:.0f} seconds ago.')
         return data
-
 class OldCheckpointer:
     def __init__(
         self,
@@ -223,21 +222,22 @@ class OldCheckpointer:
 
     def _maybe_delete_old_checkpoints(self):
         if self.rank == 0:
-            files = [f for f in self.directory.iterdir() if f.is_file()]
-            files = sorted(files, key=lambda x: int(x.name))
-            if self.max_to_keep > 0 and len(files) > self.max_to_keep:
-                to_delete = files[:-self.max_to_keep]
-                for f in to_delete:
-                    logger.info(f"Deleting old checkpoint: {f}")
-                    f.unlink()
+            dirs = [f for f in self.directory.iterdir() if f.is_dir() and f.name.isdigit()]
+            dirs = sorted(dirs, key=lambda x: int(x.name))
+            if self.max_to_keep > 0 and len(dirs) > self.max_to_keep:
+                to_delete = dirs[:-self.max_to_keep]
+                for d in to_delete:
+                    logger.info(f"Deleting old checkpoint directory: {d}")
+                    d.rmtree()  
 
     @property
     def latest_step(self) -> int | None:
         """Get the latest checkpoint."""
         if not self.directory.exists():
             return None
-        files = [f for f in self.directory.iterdir() if f.is_file()]
-        files = sorted(files, key=lambda x: int(x.name))
-        if not files:
+        dirs = [f for f in self.directory.iterdir() if f.is_dir() and f.name.isdigit()]
+        dirs = sorted(dirs, key=lambda x: int(x.name))
+        
+        if not dirs:
             return None
-        return int(files[-1].name)
+        return int(dirs[-1].name)
