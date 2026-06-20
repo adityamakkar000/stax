@@ -48,7 +48,7 @@ class Checkpoint:
     def save(self, filename=None, keys=None):
         assert self._filename or filename
         filename = filename or self._filename
-        logger.info(f'Writing chunked checkpoint to directory: {filename}')
+        logger.info(f'[checkpointer] Writing chunked checkpoint to directory: {filename}')
         self._save(filename, keys)
 
     def _save(self, filename, keys):
@@ -67,7 +67,7 @@ class Checkpoint:
         free_space = shutil.disk_usage(check_dir).free
         allowed_storage = max(free_space * 0.25, 5 * 1024**3)
         max_concurrent_chunks = max(1, min(4, int(allowed_storage / (1024**3))))
-        logger.info(f"Allowed storage: {allowed_storage / 1024**3:.2f}GB. Limiting concurrency to {max_concurrent_chunks} chunks.")
+        logger.info(f"[checkpointer] Allowed storage: {allowed_storage / 1024**3:.2f}GB. Limiting concurrency to {max_concurrent_chunks} chunks.")
 
         if 'gs://' in filename:
             tf.io.gfile.makedirs(filename)
@@ -89,8 +89,8 @@ class Checkpoint:
                 item_size = getattr(item, 'nbytes', 8)
 
                 if current_size + item_size > MAX_CHUNK_BYTES and current_chunk:
-                    tasks.append(sem_worker(
-                        self._write_and_upload_chunk, filename, chunk_idx, current_chunk, len(flat_data)
+                    tasks.append(lambda total_chunks: sem_worker(
+                        self._write_and_upload_chunk, filename, chunk_idx, current_chunk, total_chunks
                     ))
                     chunk_idx += 1
                     current_chunk = []
@@ -100,9 +100,12 @@ class Checkpoint:
                 current_size += item_size
 
             if current_chunk:
-                tasks.append(sem_worker(
-                    self._write_and_upload_chunk, filename, chunk_idx, current_chunk
+                tasks.append(lambda total_chunks :sem_worker(
+                    self._write_and_upload_chunk, filename, chunk_idx, current_chunk, total_chunks
                 ))
+
+            for i in range((total_chunks := len(tasks))):
+                tasks[i] = tasks[i](total_chunks)
 
             def _write_treedef():
                 treedef_path = f"{filename}/treedef.pkl"
@@ -120,10 +123,10 @@ class Checkpoint:
         asyncio.run(_upload_all_chunks())
 
         elapsed = time.time() - start_time
-        logger.info(f'Successfully wrote chunked checkpoint asynchronously in {elapsed:.3f}s.')
+        logger.info(f'[checkpointer] Successfully wrote chunked checkpoint asynchronously in {elapsed:.3f}s.')
 
     def _write_and_upload_chunk(self, base_dir, chunk_idx, chunk_data, total_chunks):
-        logger.info(f"Processing chunk {chunk_idx}/{total_chunks}...")
+        logger.info(f"[checkpointer] Writing chunk {chunk_idx + 1}/{total_chunks}...")
         fd, tmp_local = tempfile.mkstemp(prefix=f"chunk_{chunk_idx}_", suffix=".pkl", dir="/tmp")
         try:
             with os.fdopen(fd, 'wb') as f:
@@ -139,7 +142,7 @@ class Checkpoint:
     def load_as_dict(self, filename=None, max_concurrent_chunks: int = 4):
         assert self._filename or filename
         filename = filename or self._filename
-        logger.info(f'Reading chunked checkpoint from directory: {filename}')
+        logger.info(f'[checkpointer] Reading chunked checkpoint from directory: {filename}')
         return asyncio.run(self._load_as_dict_async(filename, max_concurrent_chunks))
 
     async def _load_as_dict_async(self, filename, max_concurrent_chunks):
@@ -180,7 +183,7 @@ class Checkpoint:
         async def _load_chunk(chunk_idx):
             chunk_path = f"{filename}/chunk_{chunk_idx}.pkl"
             async with sem:
-                logger.info(f"Loading {chunk_path}...")
+                logger.info(f"[checkpointer] Loading {chunk_path}...")
                 raw = await asyncio.to_thread(_read_bytes, chunk_path)
                 return pickle.loads(raw)
         
@@ -193,7 +196,7 @@ class Checkpoint:
         data = jax.tree_util.tree_unflatten(treedef, flat_data)
 
         age = time.time() - data.get('_timestamp', time.time())
-        logger.info(f'Loaded chunked checkpoint from {age:.0f} seconds ago.')
+        logger.info(f'[checkpointer] Loaded chunked checkpoint from {age:.0f} seconds ago.')
         return data
 
 class OldCheckpointer:
@@ -217,7 +220,7 @@ class OldCheckpointer:
         self.checkpoint_thread: threading.Thread | None = None
 
         if self.rank == 0 and not self.directory.exists():
-            logger.info(f"Creating checkpoint directory at {self.directory}")
+            logger.info(f"[checkpointer] Creating checkpoint directory at {self.directory}")
             self.directory.mkdir(parents=True, exist_ok=True)
 
     def block_until_ready(self):
@@ -259,7 +262,7 @@ class OldCheckpointer:
         if step is None:
             step = self.latest_step
             if step is None:
-                logger.info("No checkpoint found to restore.")
+                logger.info("[checkpointer] No checkpoint found to restore.")
                 return None
 
         path_name = f"{self.output_dir}{step}"
@@ -275,7 +278,7 @@ class OldCheckpointer:
             if self.max_to_keep > 0 and len(dirs) > self.max_to_keep:
                 to_delete = dirs[:-self.max_to_keep]
                 for d in to_delete:
-                    logger.info(f"Deleting old checkpoint directory: {d}")
+                    logger.info(f"[checkpointer] Deleting old checkpoint directory: {d}")
                     d.rmtree()
 
     @property
