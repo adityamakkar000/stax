@@ -89,8 +89,8 @@ class Checkpoint:
                 item_size = getattr(item, 'nbytes', 8)
 
                 if current_size + item_size > MAX_CHUNK_BYTES and current_chunk:
-                    tasks.append(lambda total_chunks: sem_worker(
-                        self._write_and_upload_chunk, filename, chunk_idx, current_chunk, total_chunks
+                    tasks.append(lambda idx, total_chunks: sem_worker(
+                        self._write_and_upload_chunk, filename, idx, current_chunk, total_chunks
                     ))
                     chunk_idx += 1
                     current_chunk = []
@@ -100,12 +100,12 @@ class Checkpoint:
                 current_size += item_size
 
             if current_chunk:
-                tasks.append(lambda total_chunks :sem_worker(
-                    self._write_and_upload_chunk, filename, chunk_idx, current_chunk, total_chunks
+                tasks.append(lambda idx, total_chunks: sem_worker(
+                    self._write_and_upload_chunk, filename, idx, current_chunk, total_chunks
                 ))
 
             for i in range((total_chunks := len(tasks))):
-                tasks[i] = tasks[i](total_chunks)
+                tasks[i] = tasks[i](i, total_chunks)
 
             def _write_treedef():
                 treedef_path = f"{filename}/treedef.pkl"
