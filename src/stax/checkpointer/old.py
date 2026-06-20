@@ -18,6 +18,8 @@ from stax.logger import staxLogger as logger
 from stax.multihost_utils import process_allgather_over_mesh, sync_over_mesh
 from stax.utils import get_rank
 
+GB = 1024**3
+CONCURRENT_CHUNK_LIMIT = 8
 
 def parent_dir(filename):
     return filename.rsplit('/', 1)[0]
@@ -65,9 +67,8 @@ class Checkpoint:
             os.makedirs(filename, exist_ok=True)
 
         free_space = shutil.disk_usage(check_dir).free
-        allowed_storage = max(free_space * 0.25, 5 * 1024**3)
-        max_concurrent_chunks = max(1, min(4, int(allowed_storage / (1024**3))))
-        logger.info(f"[checkpointer] Allowed storage: {allowed_storage / 1024**3:.2f}GB. Limiting concurrency to {max_concurrent_chunks} chunks.")
+        max_concurrent_chunks = max(1, min(CONCURRENT_CHUNK_LIMIT, int(free_space * 0.25 / GB)))
+        logger.info(f"[checkpointer] Allowed storage: {free_space * 0.25 / GB:.2f}GB. Limiting concurrency to {max_concurrent_chunks} chunks.")
 
         if 'gs://' in filename:
             tf.io.gfile.makedirs(filename)
@@ -82,7 +83,7 @@ class Checkpoint:
             chunk_idx = 0
             current_chunk = []
             current_size = 0
-            MAX_CHUNK_BYTES = 1 * 1024**3
+            MAX_CHUNK_BYTES = GB
             tasks = []
 
             for item in flat_data:
