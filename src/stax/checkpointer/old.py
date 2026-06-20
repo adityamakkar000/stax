@@ -125,8 +125,6 @@ class Checkpoint:
     def _write_and_upload_chunk(self, base_dir, chunk_idx, chunk_data):
         logger.info(f"Processing chunk {chunk_idx}...")
         fd, tmp_local = tempfile.mkstemp(prefix=f"chunk_{chunk_idx}_", suffix=".pkl", dir="/tmp")
-        if os.path.exists(tmp_local):
-            os.remove(tmp_local)
         with os.fdopen(fd, 'wb') as f:
             pickle.dump(chunk_data, f, protocol=pickle.HIGHEST_PROTOCOL)
         dest_path = f"{base_dir}/chunk_{chunk_idx}.pkl"
