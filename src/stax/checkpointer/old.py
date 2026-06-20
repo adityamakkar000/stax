@@ -184,11 +184,13 @@ class Checkpoint:
         async def _load_chunk(chunk_idx):
             chunk_path = f"{filename}/chunk_{chunk_idx}.pkl"
             async with sem:
-                logger.info(f"[checkpointer] Loading {chunk_path}...")
+                logger.info(f"[checkpointer] Loading chunk {chunk_idx + 1}/{len(chunk_indices)}...")
                 raw = await asyncio.to_thread(_read_bytes, chunk_path)
                 return pickle.loads(raw)
-        
+
+        start = time.time() 
         chunks = await asyncio.gather(*[_load_chunk(idx) for idx in chunk_indices])
+        end = time.time()
 
         flat_data = []
         for chunk in chunks:
@@ -196,8 +198,8 @@ class Checkpoint:
 
         data = jax.tree_util.tree_unflatten(treedef, flat_data)
 
-        age = time.time() - data.get('_timestamp', time.time())
-        logger.info(f'[checkpointer] Loaded chunked checkpoint from {age:.0f} seconds ago.')
+        step = name(filename)
+        logger.info(f'[checkpointer] Loaded chunked checkpoint from {step} in {end - start:.3f}s.')
         return data
 
 class OldCheckpointer:
