@@ -73,6 +73,8 @@ class Checkpoint:
         if 'gs://' in filename:
             tf.io.gfile.makedirs(filename)
 
+        
+
         async def _upload_all_chunks():
             sem = asyncio.Semaphore(max_concurrent_chunks)
 
@@ -80,20 +82,17 @@ class Checkpoint:
                 async with sem:
                     return await asyncio.to_thread(func, *args)
 
-            chunk_idx = 0
             current_chunk = []
             current_size = 0
             MAX_CHUNK_BYTES = GB
-            tasks = []
+            
+            chunks_to_upload = []
 
             for item in flat_data:
                 item_size = getattr(item, 'nbytes', 8)
 
                 if current_size + item_size > MAX_CHUNK_BYTES and current_chunk:
-                    tasks.append(lambda idx, total_chunks: sem_worker(
-                        self._write_and_upload_chunk, filename, idx, current_chunk, total_chunks
-                    ))
-                    chunk_idx += 1
+                    chunks_to_upload.append(current_chunk)
                     current_chunk = []
                     current_size = 0
 
@@ -101,12 +100,15 @@ class Checkpoint:
                 current_size += item_size
 
             if current_chunk:
-                tasks.append(lambda idx, total_chunks: sem_worker(
-                    self._write_and_upload_chunk, filename, idx, current_chunk, total_chunks
-                ))
+                chunks_to_upload.append(current_chunk)
 
-            for i in range((total_chunks := len(tasks))):
-                tasks[i] = tasks[i](i, total_chunks)
+            total_chunks = len(chunks_to_upload)
+            tasks = []
+            
+            for idx, chunk_data in enumerate(chunks_to_upload):
+                tasks.append(sem_worker(
+                    self._write_and_upload_chunk, filename, idx, chunk_data, total_chunks
+                ))
 
             def _write_treedef():
                 treedef_path = f"{filename}/treedef.pkl"
@@ -140,13 +142,13 @@ class Checkpoint:
         finally:
             os.remove(tmp_local)
 
-    def load_as_dict(self, filename=None, max_concurrent_chunks: int = 4):
+    def load_as_dict(self, filename=None):
         assert self._filename or filename
         filename = filename or self._filename
         logger.info(f'[checkpointer] Reading chunked checkpoint from directory: {filename}')
-        return asyncio.run(self._load_as_dict_async(filename, max_concurrent_chunks))
+        return asyncio.run(self._load_as_dict_async(filename))
 
-    async def _load_as_dict_async(self, filename, max_concurrent_chunks):
+    async def _load_as_dict_async(self, filename):
         is_gcs = 'gs://' in filename
 
         def _read_bytes(path):
@@ -179,7 +181,7 @@ class Checkpoint:
                 f"starting at 0."
             )
 
-        sem = asyncio.Semaphore(max(1, max_concurrent_chunks))
+        sem = asyncio.Semaphore(CONCURRENT_CHUNK_LIMIT)
 
         async def _load_chunk(chunk_idx):
             chunk_path = f"{filename}/chunk_{chunk_idx}.pkl"
