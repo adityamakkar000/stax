@@ -233,7 +233,7 @@ class WandBWriter(BaseMetricWriter):
         else:
             init_args["config"] = self.config
             init_args["name"] = self.name
-            logger.info(f"Starting a new WandB run with id: {init_args['id']}")
+            logger.info("Starting a new WandB run")
 
         self._run = wandb.init(**init_args)
 
