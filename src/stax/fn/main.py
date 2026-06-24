@@ -22,7 +22,7 @@ def train_step(
     opt_state: OptState,
     batch: Batch,
     grad_steps: int = 1,
-    grad_reduce_fn: Callable[[PyTree], PyTree] = lambda g: g,
+    reduce_fn: Callable[[PyTree, Batch], Array] = lambda s, b: s + 1,
     has_aux: bool = True,
     offload_opt_state: Optional[PyTree[NamedSharding]] = None,
 ) -> Dict[str, Any]:
@@ -44,7 +44,7 @@ def train_step(
         A dictionary containing updated 'metrics', 'params', and 'opt_state'.
     """
 
-    def grad_fn(grads: Params, batch: Batch) -> Tuple[Params, Metrics]:
+    def grad_fn(rolling_grads: tuple[Params, Array], batch: Batch) -> Tuple[Params, Metrics]:
         def loss_fn(params: Params, batch: Batch) -> Union[Array, Tuple[Array, PyTree]]:
             with jax.named_scope("fwd_pass"):
                 return step_fn(params, *batch, train=True)  # type: ignore
@@ -52,14 +52,16 @@ def train_step(
         grad_fn_inner = jax.value_and_grad(loss_fn, has_aux=has_aux)
         out, new_grads = grad_fn_inner(params, batch)
         metrics = process_aux(out, has_aux=has_aux)
+        grads, rolling_denom = rolling_grads
         grads = jax.tree.map(lambda g, ng: g + ng, grads, new_grads)
-        return grads, metrics
+        rolling_denom : Array = reduce_fn(rolling_denom, batch)
+        return (grads, rolling_denom), metrics
 
     grads = jax.tree.map(lambda x: jnp.zeros_like(x, dtype=x.dtype), params)
 
-    grads, metrics = jax.lax.scan(grad_fn, grads, batch, length=grad_steps)
+    (grads, rolling_denom), metrics = jax.lax.scan(grad_fn, (grads, jnp.zeros(())), batch, length=grad_steps)
 
-    grads = jax.tree.map(grad_reduce_fn, grads)
+    grads = jax.tree.map(lambda x: x / rolling_denom, grads)
     metrics = jax.tree.map(lambda x: x.mean(axis=0), metrics)
 
     if offload_opt_state is not None:
@@ -119,6 +121,7 @@ def get_steps_fn(
     tx: optax.GradientTransformation,
     has_aux: bool = True,
     grad_steps: int = 1,
+    reduce_fn: Callable[[PyTree, Batch], Array] = lambda s, b: s + 1,
     val_steps: int = 1,
     sharding: ShardingConfig = ShardingConfig(),
     devices: Optional[np.ndarray] = None,
@@ -175,7 +178,7 @@ def get_steps_fn(
                 opt_state,
                 batch,
                 grad_steps=grad_steps,
-                grad_reduce_fn=lambda g: g/grad_steps,
+                reduce_fn=reduce_fn,
                 has_aux=has_aux,
                 offload_opt_state=offload_opt_state_sharding,
             )
