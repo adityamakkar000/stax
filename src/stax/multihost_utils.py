@@ -108,9 +108,8 @@ def broadcast_over_mesh(in_tree: Any, is_source: bool | None = None, mesh: jax.s
     if is_source is None:
         is_source = jax.process_index() == 0
 
-    devices: np.ndarray = np.array(jax.devices()).reshape(jax.process_count(), jax.local_device_count())
-
     if mesh is None:
+        devices: np.ndarray = np.array(jax.devices()).reshape(jax.process_count(), jax.local_device_count())
         global_mesh = jax.sharding.Mesh(devices, ("processes", "local_devices"))
     else:
         global_mesh = mesh

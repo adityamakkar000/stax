@@ -1,12 +1,10 @@
 import abc
 import itertools as it
-import random
 from dataclasses import dataclass
 from typing import Any, Mapping, Optional
 
 import jax
 import wandb
-from jax.experimental.multihost_utils import broadcast_one_to_all
 from jaxtyping import PyTree
 
 from stax.logger import staxLogger as logger
@@ -233,7 +231,6 @@ class WandBWriter(BaseMetricWriter):
             init_args["id"] = self.run_id
             logger.info(f"Resuming WandB run with id: {self.run_id}")
         else:
-            init_args["id"] = str(random.randint(1, 1_000_000))
             init_args["config"] = self.config
             init_args["name"] = self.name
             logger.info(f"Starting a new WandB run with id: {init_args['id']}")

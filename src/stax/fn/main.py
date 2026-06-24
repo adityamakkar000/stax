@@ -1,5 +1,5 @@
 from functools import partial
-from typing import Any, Dict, Optional, Tuple, Union
+from typing import Any, Callable, Dict, Optional, Tuple, Union
 
 import jax
 import jax.numpy as jnp
@@ -22,6 +22,7 @@ def train_step(
     opt_state: OptState,
     batch: Batch,
     grad_steps: int = 1,
+    grad_reduce_fn: Callable[[PyTree], PyTree] = lambda g: g,
     has_aux: bool = True,
     offload_opt_state: Optional[PyTree[NamedSharding]] = None,
 ) -> Dict[str, Any]:
@@ -58,7 +59,7 @@ def train_step(
 
     grads, metrics = jax.lax.scan(grad_fn, grads, batch, length=grad_steps)
 
-    grads = jax.tree.map(lambda x: x / grad_steps, grads)
+    grads = jax.tree.map(grad_reduce_fn, grads)
     metrics = jax.tree.map(lambda x: x.mean(axis=0), metrics)
 
     if offload_opt_state is not None:
@@ -174,6 +175,7 @@ def get_steps_fn(
                 opt_state,
                 batch,
                 grad_steps=grad_steps,
+                grad_reduce_fn=lambda g: g/grad_steps,
                 has_aux=has_aux,
                 offload_opt_state=offload_opt_state_sharding,
             )
@@ -194,4 +196,4 @@ def get_steps_fn(
             val_metrics = {f"val/{k}": v for k, v in val_metrics.items()}
             return val_metrics
 
-    return train_fn, val_fn, shardings
+    return train_fn, val_fn, shardings # type: ignore
