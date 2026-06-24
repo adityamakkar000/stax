@@ -22,7 +22,7 @@ def train_step(
     opt_state: OptState,
     batch: Batch,
     grad_steps: int = 1,
-    reduce_fn: Callable[[float, Batch], float] = lambda s, b: s + 1.0,
+    reduce_fn: Callable[[int | Array, Batch], int | Array] = lambda s, b: s + 1,
     has_aux: bool = True,
     offload_opt_state: Optional[PyTree[NamedSharding]] = None,
 ) -> Dict[str, Any]:
@@ -44,7 +44,7 @@ def train_step(
         A dictionary containing updated 'metrics', 'params', and 'opt_state'.
     """
 
-    def grad_fn(rolling_grads: tuple[Params, float], batch: Batch) -> Tuple[tuple[Params, float], Metrics]:
+    def grad_fn(rolling_grads: tuple[Params, int | Array], batch: Batch) -> Tuple[tuple[Params, int | Array], Metrics]:
         def loss_fn(params: Params, batch: Batch) -> Union[Array, Tuple[Array, PyTree]]:
             with jax.named_scope("fwd_pass"):
                 return step_fn(params, *batch, train=True)  # type: ignore
@@ -59,8 +59,9 @@ def train_step(
 
     grads = jax.tree.map(lambda x: jnp.zeros_like(x, dtype=x.dtype), params)
 
-    (grads, rolling_denom), metrics = jax.lax.scan(grad_fn, (grads, 0.0), batch, length=grad_steps)
+    (grads, rolling_denom), metrics = jax.lax.scan(grad_fn, (grads, 0), batch, length=grad_steps)
 
+    rolling_denom = jnp.maximum(rolling_denom, 1)
     grads = jax.tree.map(lambda x: x / rolling_denom, grads)
     metrics = jax.tree.map(lambda x: x.sum(axis=0) / rolling_denom, metrics)
 
