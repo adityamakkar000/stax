@@ -1,5 +1,6 @@
 import abc
 import itertools as it
+import random
 from dataclasses import dataclass
 from typing import Any, Mapping, Optional
 
@@ -231,9 +232,10 @@ class WandBWriter(BaseMetricWriter):
             init_args["id"] = self.run_id
             logger.info(f"Resuming WandB run with id: {self.run_id}")
         else:
+            init_args["id"] = str(random.randint(1, 1_000_000))
             init_args["config"] = self.config
             init_args["name"] = self.name
-            logger.info("Starting a new WandB run")
+            logger.info(f"Starting a new WandB run with id: {init_args['id']}")
 
         self._run = wandb.init(**init_args)
 
