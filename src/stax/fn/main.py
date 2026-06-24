@@ -122,7 +122,7 @@ def get_steps_fn(
     tx: optax.GradientTransformation,
     has_aux: bool = True,
     grad_steps: int = 1,
-    reduce_fn: Callable[[float, Batch], float] = lambda s, b: s + 1.0,
+    reduce_fn: Callable[[int | Array, Batch], int | Array] = lambda s, b: s + 1,
     val_steps: int = 1,
     sharding: ShardingConfig = ShardingConfig(),
     devices: Optional[np.ndarray] = None,
