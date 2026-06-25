@@ -54,7 +54,7 @@ def train_step(
         metrics = process_aux(out, has_aux=has_aux)
         grads, rolling_denom = rolling_grads
         grads = jax.tree.map(lambda g, ng: g + ng, grads, new_grads)
-        rolling_denom  = reduce_fn(rolling_denom, batch)
+        rolling_denom  = reduce_fn(rolling_denom, *batch)
         return (grads, rolling_denom), metrics
 
     grads = jax.tree.map(lambda x: jnp.zeros_like(x, dtype=x.dtype), params)
