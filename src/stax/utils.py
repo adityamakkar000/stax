@@ -177,9 +177,14 @@ def get_perf_func(trace_path, func: JitWrapped, *args, **kwargs) -> dict[str, Py
     compiled_fn = func.lower(*args, **kwargs).compile({"xla_enable_transpose_trace": True})
     trace_path = trace_path if get_rank() == 0 else None
 
-    with Tracker(timer=True, trace=trace_path) as t:
-        out = compiled_fn(*args, **kwargs)
+    def run(*args, **kwargs):
+        out = compiled_fn(*args, **kwargs) # warmup 
         jax.tree.map(lambda x: x.block_until_ready(), out)
+
+    run(*args, **kwargs)  # warmup 
+    with Tracker(timer=True, trace=trace_path) as t:
+        run(*args, **kwargs)
+
     time_s = t.data.get("time", 0.0)
     stats = estimate_compile_stats(compiled_fn)
     total_flops_tb = stats.get("total_flops_gb", 0.0) / 1024
