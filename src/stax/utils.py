@@ -179,11 +179,12 @@ def get_perf_func(trace_path, func: JitWrapped, *args, **kwargs) -> dict[str, Py
 
     def run(*args, **kwargs):
         out = compiled_fn(*args, **kwargs) # warmup 
-        jax.tree.map(lambda x: x.block_until_ready(), out)
+        out = jax.tree.map(lambda x: x.block_until_ready(), out)
+        return out
 
     run(*args, **kwargs)  # warmup 
     with Tracker(timer=True, trace=trace_path) as t:
-        run(*args, **kwargs)
+        out = run(*args, **kwargs)
 
     time_s = t.data.get("time", 0.0)
     stats = estimate_compile_stats(compiled_fn)
