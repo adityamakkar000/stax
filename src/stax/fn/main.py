@@ -150,13 +150,12 @@ def get_steps_fn(
     """
     single_step = partial(step_fn, model)
 
-    if sharding.sharding_type == ShardingType.SINGLE:
-        if devices is None:
-            devices = np.array([jax.devices()[0]])
-        elif devices.size > 1 or devices.ndim > 1:
-            raise ValueError(f"expected single device got {devices=}")
 
-    mesh = setup_mesh(devices=devices)
+    mesh = setup_mesh(
+        (sharding.dp_group_size, sharding.fsdp_group_size, sharding.cp_group_size), 
+        devices=devices
+    )
+
     shardings = get_sharding(mesh, sharding)
     train_shardings = {
         "metrics": shardings.metrics_sharding,
