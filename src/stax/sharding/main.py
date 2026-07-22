@@ -34,11 +34,7 @@ class ShardingConfig:
     fsdp_group_size: int = -1
     
 
-    # def __post_init__(self):
-    #     if self.fsdp_group_size > 1:
-    #         logger.info(
-    #             "Using FSDP make sure to set `xla_tpu_enable_latency_hiding_scheduler=false` for better comms-compute overlap"
-    #             )
+            
 
 
 @dataclass
@@ -63,19 +59,30 @@ class AXIS_NAMES_ENUM(enum.Enum):
     def full_mesh(cls):
         return (cls.DP.value, cls.FSDP.value, cls.CP.value)
 
+
+def resolve_axis_sizes(axis_sizes: tuple[int, ...], n_devices: int) -> tuple[int, ...]:
+    axis_sizes_list = list(axis_sizes)
+    less_than_zero = [i for i, s in enumerate(axis_sizes) if s < 0]
+    if len(less_than_zero) > 1:
+        raise ValueError(f"axis_sizes contains {len(less_than_zero)} negative values, which is not allowed")
+    if less_than_zero == 1:
+        if (n_devices % (-1 * (product := np.prod(axis_sizes)))) != 0:
+            raise ValueError(f"Cannot resolve axis_sizes with one negative value: {axis_sizes} for {n_devices} devices")
+        axis_sizes_list[less_than_zero[0]] = int(n_devices // (-1 * product))
+    if np.prod(axis_sizes_list) != n_devices:
+        raise ValueError(f"Resolved axis_sizes {axis_sizes_list} do not match number of devices {n_devices}")
+    return tuple(axis_sizes_list)
+
 def setup_mesh(axis_sizes: tuple[int, ...], devices: np.ndarray | None = None):
     if not jax.distributed.is_initialized():
         raise ValueError("jax distributed has not been initialized")
 
     if devices is None:
         devices = np.array(jax.devices())
+    n_devices = len(devices)
 
     axis_type = (jax.sharding.AxisType.Auto, jax.sharding.AxisType.Auto, jax.sharding.AxisType.Auto)
-
-    n_devices = len(devices)
-    if np.prod(axis_sizes) != n_devices:
-        raise ValueError(f"Product of axis_sizes {axis_sizes} must equal number of devices {n_devices}")
-
+    axis_sizes = resolve_axis_sizes(axis_sizes, n_devices)
     try:
         mesh = jax.make_mesh(axis_sizes, AXIS_NAMES_ENUM.full_mesh(), axis_type, devices=list(devices))
     except Exception as _:
@@ -84,6 +91,10 @@ def setup_mesh(axis_sizes: tuple[int, ...], devices: np.ndarray | None = None):
         mesh = Mesh(devices, AXIS_NAMES_ENUM.full_mesh(), axis_type)
     jax.set_mesh(mesh)
     logger.info(f"setup mesh : {mesh}")
+    logger.info(
+        "Set `xla_tpu_enable_latency_hiding_scheduler=false` for better comms-compute overlap"
+    )
+
     return mesh
 
 
