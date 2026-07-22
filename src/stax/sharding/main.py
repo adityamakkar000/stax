@@ -34,10 +34,11 @@ class ShardingConfig:
     fsdp_group_size: int = -1
     
 
-    def __post_init__(self):
-            logger.info(
-                "Using FSDP make sure to set `xla_tpu_enable_latency_hiding_scheduler=false` for better comms-compute overlap"
-            )
+    # def __post_init__(self):
+    #     if self.fsdp_group_size > 1:
+    #         logger.info(
+    #             "Using FSDP make sure to set `xla_tpu_enable_latency_hiding_scheduler=false` for better comms-compute overlap"
+    #             )
 
 
 @dataclass
