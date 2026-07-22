@@ -10,7 +10,7 @@ from jaxtyping import Array, PyTree
 
 from stax.logger import staxLogger as logger
 from stax.model_module import modelBase
-from stax.sharding import ShardingConfig, Shardings, ShardingType, get_sharding, setup_mesh
+from stax.sharding import ShardingConfig, Shardings, get_sharding, setup_mesh
 
 from .utils import Batch, Metrics, OptState, Params, SingleStepFn, StepFn, TrainFn, ValFn, process_aux
 
