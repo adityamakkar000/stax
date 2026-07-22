@@ -54,7 +54,7 @@ def train_step(
         metrics = process_aux(out, has_aux=has_aux)
         grads, rolling_denom = rolling_grads
         grads = jax.tree.map(lambda g, ng: g + ng, grads, new_grads)
-        rolling_denom  = reduce_fn(rolling_denom, *batch)
+        rolling_denom = reduce_fn(rolling_denom, *batch)
         return (grads, rolling_denom), metrics
 
     grads = jax.tree.map(lambda x: jnp.zeros_like(x, dtype=x.dtype), params)
@@ -150,11 +150,7 @@ def get_steps_fn(
     """
     single_step = partial(step_fn, model)
 
-
-    mesh = setup_mesh(
-        (sharding.dp_group_size, sharding.fsdp_group_size, sharding.cp_group_size), 
-        devices=devices
-    )
+    mesh = setup_mesh((sharding.dp_group_size, sharding.fsdp_group_size, sharding.cp_group_size), devices=devices)
 
     shardings = get_sharding(mesh, sharding)
     train_shardings = {
@@ -199,4 +195,4 @@ def get_steps_fn(
             val_metrics = {f"val/{k}": v for k, v in val_metrics.items()}
             return val_metrics
 
-    return train_fn, val_fn, shardings # type: ignore
+    return train_fn, val_fn, shardings  # type: ignore

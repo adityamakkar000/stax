@@ -18,11 +18,14 @@ from stax.utils import get_rank
 GB = 1024**3
 CONCURRENT_CHUNK_LIMIT = 8
 
+
 def parent_dir(filename):
-    return filename.rsplit('/', 1)[0]
+    return filename.rsplit("/", 1)[0]
+
 
 def name(filename):
-    return filename.rsplit('/', 1)[1]
+    return filename.rsplit("/", 1)[1]
+
 
 class Checkpoint:
     def __init__(self, filename):
@@ -30,14 +33,14 @@ class Checkpoint:
         self._values = {}
 
     def __setattr__(self, name, value):
-        if name in ('exists', 'save', 'load'):
+        if name in ("exists", "save", "load"):
             return super().__setattr__(name, value)
-        if name.startswith('_'):
+        if name.startswith("_"):
             return super().__setattr__(name, value)
         self._values[name] = value
 
     def __getattr__(self, name):
-        if name.startswith('_'):
+        if name.startswith("_"):
             raise AttributeError(name)
         try:
             return self._values[name]
@@ -47,30 +50,30 @@ class Checkpoint:
     def save(self, filename=None, keys=None):
         assert self._filename or filename
         filename = filename or self._filename
-        logger.info(f'[checkpointer] Writing chunked checkpoint to directory: {filename}')
+        logger.info(f"[checkpointer] Writing chunked checkpoint to directory: {filename}")
         self._save(filename, keys)
 
     def _save(self, filename, keys):
         start_time = time.time()
         keys = tuple(self._values.keys() if keys is None else keys)
-        assert all([not k.startswith('_') for k in keys]), keys
+        assert all([not k.startswith("_") for k in keys]), keys
         data = {k: self._values[k] for k in keys}
-        data['_timestamp'] = time.time()
+        data["_timestamp"] = time.time()
 
         flat_data, treedef = jax.tree_util.tree_flatten(data)
 
-        check_dir = "/tmp" if 'gs://' in filename else filename
-        if 'gs://' not in filename:
+        check_dir = "/tmp" if "gs://" in filename else filename
+        if "gs://" not in filename:
             os.makedirs(filename, exist_ok=True)
 
         free_space = shutil.disk_usage(check_dir).free
         max_concurrent_chunks = max(1, min(CONCURRENT_CHUNK_LIMIT, int(free_space * 0.25 / GB)))
-        logger.info(f"[checkpointer] Allowed storage: {free_space * 0.25 / GB:.2f}GB. Limiting concurrency to {max_concurrent_chunks} chunks.")
+        logger.info(
+            f"[checkpointer] Allowed storage: {free_space * 0.25 / GB:.2f}GB. Limiting concurrency to {max_concurrent_chunks} chunks."
+        )
 
-        if 'gs://' in filename:
+        if "gs://" in filename:
             tf.io.gfile.makedirs(filename)
-
-        
 
         async def _upload_all_chunks():
             sem = asyncio.Semaphore(max_concurrent_chunks)
@@ -82,11 +85,11 @@ class Checkpoint:
             current_chunk = []
             current_size = 0
             MAX_CHUNK_BYTES = GB
-            
+
             chunks_to_upload = []
 
             for item in flat_data:
-                item_size = getattr(item, 'nbytes', 8)
+                item_size = getattr(item, "nbytes", 8)
 
                 if current_size + item_size > MAX_CHUNK_BYTES and current_chunk:
                     chunks_to_upload.append(current_chunk)
@@ -101,19 +104,17 @@ class Checkpoint:
 
             total_chunks = len(chunks_to_upload)
             tasks = []
-            
+
             for idx, chunk_data in enumerate(chunks_to_upload):
-                tasks.append(sem_worker(
-                    self._write_and_upload_chunk, filename, idx, chunk_data, total_chunks
-                ))
+                tasks.append(sem_worker(self._write_and_upload_chunk, filename, idx, chunk_data, total_chunks))
 
             def _write_treedef():
                 treedef_path = f"{filename}/treedef.pkl"
-                if 'gs://' in filename:
-                    with tf.io.gfile.GFile(treedef_path, 'wb') as f:
+                if "gs://" in filename:
+                    with tf.io.gfile.GFile(treedef_path, "wb") as f:
                         pickle.dump(treedef, f)
                 else:
-                    with open(treedef_path, 'wb') as f:
+                    with open(treedef_path, "wb") as f:
                         pickle.dump(treedef, f)
 
             tasks.append(asyncio.to_thread(_write_treedef))
@@ -123,16 +124,16 @@ class Checkpoint:
         asyncio.run(_upload_all_chunks())
 
         elapsed = time.time() - start_time
-        logger.info(f'[checkpointer] Successfully wrote chunked checkpoint asynchronously in {elapsed:.3f}s.')
+        logger.info(f"[checkpointer] Successfully wrote chunked checkpoint asynchronously in {elapsed:.3f}s.")
 
     def _write_and_upload_chunk(self, base_dir, chunk_idx, chunk_data, total_chunks):
         logger.info(f"[checkpointer] Writing chunk {chunk_idx + 1}/{total_chunks}...")
         fd, tmp_local = tempfile.mkstemp(prefix=f"chunk_{chunk_idx}_", suffix=".pkl", dir="/tmp")
         try:
-            with os.fdopen(fd, 'wb') as f:
+            with os.fdopen(fd, "wb") as f:
                 pickle.dump(chunk_data, f, protocol=pickle.HIGHEST_PROTOCOL)
             dest_path = f"{base_dir}/chunk_{chunk_idx}.pkl"
-            if 'gs://' in base_dir:
+            if "gs://" in base_dir:
                 tf.io.gfile.copy(tmp_local, dest_path, overwrite=True)
             else:
                 shutil.move(tmp_local, dest_path)
@@ -142,32 +143,31 @@ class Checkpoint:
     def load_as_dict(self, filename=None):
         assert self._filename or filename
         filename = filename or self._filename
-        logger.info(f'[checkpointer] Reading chunked checkpoint from directory: {filename}')
+        logger.info(f"[checkpointer] Reading chunked checkpoint from directory: {filename}")
         return asyncio.run(self._load_as_dict_async(filename))
 
     async def _load_as_dict_async(self, filename):
-        is_gcs = 'gs://' in filename
+        is_gcs = "gs://" in filename
 
         def _read_bytes(path):
             if is_gcs:
-                with tf.io.gfile.GFile(path, 'rb') as f:
+                with tf.io.gfile.GFile(path, "rb") as f:
                     return f.read()
             else:
-                with open(path, 'rb') as f:
+                with open(path, "rb") as f:
                     return f.read()
 
         # first load the tree metadata blocking
         treedef_path = f"{filename}/treedef.pkl"
         treedef = pickle.loads(await asyncio.to_thread(_read_bytes, treedef_path))
 
-        
         def _list_chunk_indices():
             entries = tf.io.gfile.listdir(filename) if is_gcs else os.listdir(filename)
             indices = []
             for entry in entries:
-                stripped = entry.rstrip('/')
-                if stripped.startswith('chunk_') and stripped.endswith('.pkl'):
-                    indices.append(int(stripped[len('chunk_'):-len('.pkl')]))
+                stripped = entry.rstrip("/")
+                if stripped.startswith("chunk_") and stripped.endswith(".pkl"):
+                    indices.append(int(stripped[len("chunk_") : -len(".pkl")]))
             return sorted(indices)
 
         chunk_indices = await asyncio.to_thread(_list_chunk_indices)
@@ -187,7 +187,7 @@ class Checkpoint:
                 raw = await asyncio.to_thread(_read_bytes, chunk_path)
                 return pickle.loads(raw)
 
-        start = time.time() 
+        start = time.time()
         chunks = await asyncio.gather(*[_load_chunk(idx) for idx in chunk_indices])
         end = time.time()
 
@@ -198,8 +198,9 @@ class Checkpoint:
         data = jax.tree_util.tree_unflatten(treedef, flat_data)
 
         step = name(filename)
-        logger.info(f'[checkpointer] Loaded chunked checkpoint from {step} in {end - start:.3f}s.')
+        logger.info(f"[checkpointer] Loaded chunked checkpoint from {step} in {end - start:.3f}s.")
         return data
+
 
 class OldCheckpointer:
     def __init__(
@@ -213,8 +214,8 @@ class OldCheckpointer:
             raise AssertionError("output_dir must be a valid GCS path starting with gs")
 
         self.output_dir = output_dir
-        if not self.output_dir.endswith('/'):
-            self.output_dir = self.output_dir + '/'
+        if not self.output_dir.endswith("/"):
+            self.output_dir = self.output_dir + "/"
         self.max_to_keep = max_to_keep
         self.train_mesh = train_mesh
         self.directory = epath.Path(self.output_dir)
@@ -248,6 +249,7 @@ class OldCheckpointer:
 
         if self.rank == 0:
             filename = f"{self.output_dir}{step}"
+
             def _write():
                 checkpoint = Checkpoint(filename)
                 checkpoint.data = data
@@ -269,7 +271,7 @@ class OldCheckpointer:
 
         path_name = f"{self.output_dir}{step}"
         checkpoint = Checkpoint(path_name)
-        data : dict[str, Any] = checkpoint.load_as_dict()['data']
+        data: dict[str, Any] = checkpoint.load_as_dict()["data"]
         del checkpoint
         return data["checkpoint_data"], data["metadata"]
 
@@ -278,7 +280,7 @@ class OldCheckpointer:
             dirs = [f for f in self.directory.iterdir() if f.is_dir() and f.name.isdigit()]
             dirs = sorted(dirs, key=lambda x: int(x.name))
             if self.max_to_keep > 0 and len(dirs) > self.max_to_keep:
-                to_delete = dirs[:-self.max_to_keep]
+                to_delete = dirs[: -self.max_to_keep]
                 for d in to_delete:
                     logger.info(f"[checkpointer] Deleting old checkpoint directory: {d}")
                     d.rmtree()

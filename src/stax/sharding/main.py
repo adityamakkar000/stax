@@ -18,7 +18,7 @@ class ShardingConfig:
     params_shape: PyTree[jax.ShapeDtypeStruct] = jax.ShapeDtypeStruct((1,), jnp.float32)
     opt_state_shape: PyTree[jax.ShapeDtypeStruct] = jax.ShapeDtypeStruct((1,), jnp.float32)
 
-    #TODO: fix this
+    # TODO: fix this
     # params_offload: bool = False
     opt_state_offload: bool = False
     # dp options
@@ -32,9 +32,6 @@ class ShardingConfig:
     dp_group_size: int = 1
     cp_group_size: int = 1
     fsdp_group_size: int = -1
-    
-
-            
 
 
 @dataclass
@@ -54,7 +51,7 @@ class AXIS_NAMES_ENUM(enum.Enum):
     @classmethod
     def batch_mesh(cls):
         return ()
-    
+
     @classmethod
     def full_mesh(cls):
         return (cls.DP.value, cls.FSDP.value, cls.CP.value)
@@ -73,6 +70,7 @@ def resolve_axis_sizes(axis_sizes: tuple[int, ...], n_devices: int) -> tuple[int
         raise ValueError(f"Resolved axis_sizes {axis_sizes_list} do not match number of devices {n_devices}")
     return tuple(axis_sizes_list)
 
+
 def setup_mesh(axis_sizes: tuple[int, ...], devices: np.ndarray | None = None):
     if not jax.distributed.is_initialized():
         raise ValueError("jax distributed has not been initialized")
@@ -83,18 +81,18 @@ def setup_mesh(axis_sizes: tuple[int, ...], devices: np.ndarray | None = None):
 
     axis_type = (jax.sharding.AxisType.Auto, jax.sharding.AxisType.Auto, jax.sharding.AxisType.Auto)
     axis_sizes = resolve_axis_sizes(axis_sizes, n_devices)
+    axis_names = AXIS_NAMES_ENUM.full_mesh()
+
     try:
-        mesh = jax.make_mesh(axis_sizes, AXIS_NAMES_ENUM.full_mesh(), axis_type, devices=list(devices))
+        mesh = jax.make_mesh(axis_sizes, axis_names, axis_type, devices=list(devices))
     except Exception as _:
         # if jax cannot create optimal mesh layout, make a manual mesh
         logger.warning("Failed to create mesh with make_mesh, falling back to `jax.sharding.Mesh`")
-        mesh = Mesh(devices, AXIS_NAMES_ENUM.full_mesh(), axis_type)
+        mesh = Mesh(devices, axis_names, axis_type)
+
     jax.set_mesh(mesh)
     logger.info(f"setup mesh : {mesh}")
-    logger.info(
-        "Set `xla_tpu_enable_latency_hiding_scheduler=false` for better comms-compute overlap"
-    )
-
+    logger.info("Set `xla_tpu_enable_latency_hiding_scheduler=false` for better comms-compute overlap")
     return mesh
 
 
@@ -123,7 +121,11 @@ def get_sharding(mesh: Mesh, config: ShardingConfig) -> Shardings:
 
             data_tuple = [None for _ in range(x.ndim)]
             if config.cp_shard_dim == config.data_shard_dim:
-                data_tuple[config.data_shard_dim] = (AXIS_NAMES_ENUM.DP.value, AXIS_NAMES_ENUM.FSDP.value, AXIS_NAMES_ENUM.CP.value)
+                data_tuple[config.data_shard_dim] = (
+                    AXIS_NAMES_ENUM.DP.value,
+                    AXIS_NAMES_ENUM.FSDP.value,
+                    AXIS_NAMES_ENUM.CP.value,
+                )
             else:
                 data_tuple[config.data_shard_dim] = (AXIS_NAMES_ENUM.DP.value, AXIS_NAMES_ENUM.FSDP.value)
                 data_tuple[config.cp_shard_dim] = AXIS_NAMES_ENUM.CP.value

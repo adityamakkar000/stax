@@ -178,11 +178,11 @@ def get_perf_func(trace_path, func: JitWrapped, *args, **kwargs) -> dict[str, Py
     trace_path = trace_path if get_rank() == 0 else None
 
     def run(*args, **kwargs):
-        out = compiled_fn(*args, **kwargs) # warmup 
+        out = compiled_fn(*args, **kwargs)  # warmup
         out = jax.tree.map(lambda x: x.block_until_ready(), out)
         return out
 
-    run(*args, **kwargs)  # warmup 
+    run(*args, **kwargs)  # warmup
     with Tracker(timer=True, trace=trace_path) as t:
         out = run(*args, **kwargs)
 
@@ -209,12 +209,14 @@ def get_perf_func(trace_path, func: JitWrapped, *args, **kwargs) -> dict[str, Py
     logger.info(report)
     return out
 
+
 @lru_cache
 def get_rank() -> int:
     """Returns the current host index based on RANK environment variable."""
     if not jax.distributed.is_initialized():
         raise RuntimeError("JAX distributed environment is not initialized. Call init_distributed_jax() first.")
     return jax.process_index()
+
 
 def init_distributed_jax():
     """Initializes JAX distributed environment."""
@@ -240,10 +242,10 @@ def init_distributed_jax():
 def metrics_all_reduce(metrics: PyTree, mesh: jax.sharding.Mesh | None = None) -> PyTree:
     """All reduces metrics across hosts by averaging."""
     gathered_vals = jax.tree.map(
-        lambda x: process_allgather_over_mesh(jnp.array(x), tiled=True, mesh=mesh).mean(),
-        metrics
+        lambda x: process_allgather_over_mesh(jnp.array(x), tiled=True, mesh=mesh).mean(), metrics
     )
     return jax.tree.map(lambda x: x.item(), gathered_vals)
+
 
 def get_memory() -> tuple[float, float]:
     """

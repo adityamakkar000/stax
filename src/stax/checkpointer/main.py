@@ -16,9 +16,10 @@ def to_abstract(x: Any) -> jax.ShapeDtypeStruct | int | float:
         return x
     return ocp.utils.to_shape_dtype_struct(x)
 
+
 def init_dist_ids():
-    ocp_multihost.use_experimental_distributed_process_id = lambda: True 
-    
+    ocp_multihost.use_experimental_distributed_process_id = lambda: True
+
 
 class Checkpointer:
     """A helper class to manage saving and restoring checkpoints in JAX using Orbax.
@@ -43,9 +44,9 @@ class Checkpointer:
         max_to_keep: int = 1,
         best_key: str | None = None,
         best_mode: str = "min",
-        *, 
+        *,
         active_processes: Optional[set[int]] = None,
-        train_mesh: Optional[jax.sharding.Mesh] = None
+        train_mesh: Optional[jax.sharding.Mesh] = None,
     ) -> None:
         """Initialize the Checkpointer.
 
@@ -73,7 +74,9 @@ class Checkpointer:
             assert train_mesh is not None, "train_mesh must be provided when active_processes is specified"
             init_dist_ids()
             active_processes = {ocp_multihost.runtime_to_distributed_process_id(rt) for rt in active_processes}
-            logger.info(f"Initialized distributed process ID mapping for active processes: {active_processes}", log_for_all=True)
+            logger.info(
+                f"Initialized distributed process ID mapping for active processes: {active_processes}", log_for_all=True
+            )
             directory = epath.Path(output_dir)
             logger.info(f"Active processes for checkpointing: {active_processes}")
             if get_rank() == 0 and not directory.exists():
@@ -85,8 +88,8 @@ class Checkpointer:
         self.options = ocp.CheckpointManagerOptions(
             max_to_keep=max_to_keep,
             multiprocessing_options=mp_options,
-            create=(active_processes is None), 
-            save_root_metadata=False
+            create=(active_processes is None),
+            save_root_metadata=False,
         )
         self.checkpoint_manager = ocp.CheckpointManager(self.checkpoint_dir, options=self.options)
 
@@ -98,7 +101,11 @@ class Checkpointer:
 
             self.best_checkpoint_dir: str | None = f"{output_dir}/best"
             self.best_options = ocp.CheckpointManagerOptions(
-                max_to_keep=1, best_fn=self.best_fn, best_mode=self.best_mode, multiprocessing_options=mp_options, create=(active_processes is None)
+                max_to_keep=1,
+                best_fn=self.best_fn,
+                best_mode=self.best_mode,
+                multiprocessing_options=mp_options,
+                create=(active_processes is None),
             )
             self.best_checkpoint_manager = ocp.CheckpointManager(self.best_checkpoint_dir, options=self.best_options)
         else:
