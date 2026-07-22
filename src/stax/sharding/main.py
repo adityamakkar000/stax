@@ -12,14 +12,6 @@ from jaxtyping import Array, PyTree
 from stax.logger import staxLogger as logger
 from stax.utils import is_key
 
-"""
-TODO: 
-- add multihost sharding 
-- integrate with training loop to add Zero 1,2,3 
-- switch everything to a ShardingConfig
-"""
-
-
 
 @dataclass
 class ShardingConfig:
