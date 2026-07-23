@@ -129,7 +129,7 @@ def get_sharding(mesh: Mesh, config: ShardingConfig) -> Shardings:
             else:
                 data_tuple[config.data_shard_dim] = (AXIS_NAMES_ENUM.DP.value, AXIS_NAMES_ENUM.FSDP.value)
                 data_tuple[config.cp_shard_dim] = AXIS_NAMES_ENUM.CP.value
-            data_sharding = NamedSharding(mesh, P(*(data_tuple)))
+            data_sharding = NamedSharding(mesh, P(*data_tuple,))
 
             num_hosts = mesh.devices.size // jax.local_device_count()
             x_shape = (
