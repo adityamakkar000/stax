@@ -77,7 +77,7 @@ def setup_mesh(axis_sizes: tuple[int, ...], devices: np.ndarray | None = None):
 
     if devices is None:
         devices = np.array(jax.devices())
-    n_devices = len(devices)
+    n_devices = np.prod(devices.shape)
 
     axis_type = (jax.sharding.AxisType.Auto, jax.sharding.AxisType.Auto, jax.sharding.AxisType.Auto)
     axis_sizes = resolve_axis_sizes(axis_sizes, n_devices)
