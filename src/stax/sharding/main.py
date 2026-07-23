@@ -62,7 +62,7 @@ def resolve_axis_sizes(axis_sizes: tuple[int, ...], n_devices: int) -> tuple[int
     less_than_zero = [i for i, s in enumerate(axis_sizes) if s < 0]
     if len(less_than_zero) > 1:
         raise ValueError(f"axis_sizes contains {len(less_than_zero)} negative values, which is not allowed")
-    if less_than_zero == 1:
+    if len(less_than_zero) == 1:
         if (n_devices % (-1 * (product := np.prod(axis_sizes)))) != 0:
             raise ValueError(f"Cannot resolve axis_sizes with one negative value: {axis_sizes} for {n_devices} devices")
         axis_sizes_list[less_than_zero[0]] = int(n_devices // (-1 * product))
