@@ -21,6 +21,7 @@ def train_step(
     params: Params,
     opt_state: OptState,
     batch: Batch,
+    teacher_params=None,
     grad_steps: int = 1,
     reduce_fn: Callable[[int | Array, Batch], int | Array] = lambda s, b: s + 1,
     has_aux: bool = True,
@@ -47,7 +48,7 @@ def train_step(
     def grad_fn(rolling_grads: tuple[Params, int | Array], batch: Batch) -> Tuple[tuple[Params, int | Array], Metrics]:
         def loss_fn(params: Params, batch: Batch) -> Union[Array, Tuple[Array, PyTree]]:
             with jax.named_scope("fwd_pass"):
-                return step_fn(params, *batch, train=True)  # type: ignore
+                return step_fn(params, *batch, teacher_params=teacher_params, train=True)  # type: ignore
 
         grad_fn_inner = jax.value_and_grad(loss_fn, has_aux=has_aux)
         out, new_grads = grad_fn_inner(params, batch)
@@ -164,7 +165,7 @@ def get_steps_fn(
         offload_opt_state_sharding = jax.tree.map(lambda x: x.with_memory_kind("device"), shardings.opt_state_sharding)
 
     @partial(jax.jit, out_shardings=train_shardings, **jit_kwargs)
-    def train_fn(params: Params, opt_state: OptState, *batch: Batch) -> Dict[str, Any]:
+    def train_fn(params: Params, opt_state: OptState, teacher_params, *batch: Batch) -> Dict[str, Any]:
         logger.info("compiling train step fn ...")
         with jax.named_scope("train_step"):
             out = train_step(
@@ -173,6 +174,7 @@ def get_steps_fn(
                 params,
                 opt_state,
                 batch,
+                teacher_params=teacher_params,
                 grad_steps=grad_steps,
                 reduce_fn=reduce_fn,
                 has_aux=has_aux,
