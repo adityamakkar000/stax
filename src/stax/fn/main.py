@@ -21,11 +21,11 @@ def train_step(
     params: Params,
     opt_state: OptState,
     batch: Batch,
-    teacher_params=None,
     grad_steps: int = 1,
     reduce_fn: Callable[[int | Array, Batch], int | Array] = lambda s, b: s + 1,
     has_aux: bool = True,
     offload_opt_state: Optional[PyTree[NamedSharding]] = None,
+    **loss_kwargs
 ) -> Dict[str, Any]:
     """
     Performs a training step, including gradient calculation and parameter updates.
@@ -48,7 +48,7 @@ def train_step(
     def grad_fn(rolling_grads: tuple[Params, int | Array], batch: Batch) -> Tuple[tuple[Params, int | Array], Metrics]:
         def loss_fn(params: Params, batch: Batch) -> Union[Array, Tuple[Array, PyTree]]:
             with jax.named_scope("fwd_pass"):
-                return step_fn(params, *batch, teacher_params=teacher_params, train=True)  # type: ignore
+                return step_fn(params, *batch, **loss_kwargs, train=True)  # type: ignore
 
         grad_fn_inner = jax.value_and_grad(loss_fn, has_aux=has_aux)
         out, new_grads = grad_fn_inner(params, batch)
@@ -85,6 +85,7 @@ def val_step(
     batch: Batch,
     val_steps: int = 1,
     has_aux: bool = True,
+    **loss_kwargs,
 ) -> Metrics:
     """
     Performs a validation step over multiple micro-batches.
@@ -102,7 +103,7 @@ def val_step(
 
     # carry is a placeholder for scan
     def val_fn(_carry: None, batch: Batch) -> Tuple[None, Metrics]:
-        out = step_fn(params, *batch, train=False)  # type: ignore
+        out = step_fn(params, *batch, **loss_kwargs, train=False)  # type: ignore
         metrics = process_aux(out, has_aux=has_aux)
         return _carry, metrics
 
@@ -165,7 +166,7 @@ def get_steps_fn(
         offload_opt_state_sharding = jax.tree.map(lambda x: x.with_memory_kind("device"), shardings.opt_state_sharding)
 
     @partial(jax.jit, out_shardings=train_shardings, **jit_kwargs)
-    def train_fn(params: Params, opt_state: OptState, teacher_params, *batch: Batch) -> Dict[str, Any]:
+    def train_fn(params: Params, opt_state: OptState, *batch: Batch, **loss_kwargs) -> Dict[str, Any]:
         logger.info("compiling train step fn ...")
         with jax.named_scope("train_step"):
             out = train_step(
@@ -174,7 +175,7 @@ def get_steps_fn(
                 params,
                 opt_state,
                 batch,
-                teacher_params=teacher_params,
+                **loss_kwargs,
                 grad_steps=grad_steps,
                 reduce_fn=reduce_fn,
                 has_aux=has_aux,
@@ -184,7 +185,7 @@ def get_steps_fn(
             return out
 
     @partial(jax.jit, out_shardings=shardings.metrics_sharding, **jit_kwargs)
-    def val_fn(params: Params, *batch: Batch) -> Metrics:
+    def val_fn(params: Params, *batch: Batch, **loss_kwargs) -> Metrics:
         logger.info("compiling val fn ...")
         with jax.named_scope("val_step"):
             val_metrics = val_step(
@@ -193,6 +194,7 @@ def get_steps_fn(
                 batch,
                 val_steps=val_steps,
                 has_aux=has_aux,
+                **loss_kwargs,
             )
             val_metrics = {f"val/{k}": v for k, v in val_metrics.items()}
             return val_metrics
