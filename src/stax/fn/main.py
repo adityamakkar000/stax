@@ -25,7 +25,7 @@ def train_step(
     reduce_fn: Callable[[int | Array, Batch], int | Array] = lambda s, b: s + 1,
     has_aux: bool = True,
     offload_opt_state: Optional[PyTree[NamedSharding]] = None,
-    **loss_kwargs
+    **loss_kwargs,
 ) -> Dict[str, Any]:
     """
     Performs a training step, including gradient calculation and parameter updates.
