@@ -31,6 +31,7 @@ from stax.utils import (
 )
 from stax.writer import (
     BaseMetricWriter,
+    TableMetrics,
     TextWriter,
     WandBWriter,
 )
@@ -57,6 +58,7 @@ __all__ = [
     "get_memory",
     # writer
     "BaseMetricWriter",
+    "TableMetrics",
     "TextWriter",
     "WandBWriter",
     # logger

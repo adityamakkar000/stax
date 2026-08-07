@@ -1,7 +1,7 @@
 import abc
 import itertools as it
 import random
-from dataclasses import dataclass
+from dataclasses import Field, dataclass
 from typing import Any, Mapping, Optional
 
 import jax
@@ -14,10 +14,16 @@ from stax.utils import convert_to_scalar, get_rank
 
 
 @dataclass
+class TableMetrics:
+    table_name: str
+    table: dict[str, list[str]]
+
+
+@dataclass
 class Metric:
     step: int
     data: dict[str, Any]
-    generations: Optional[list[tuple[list[str], str]]] = None
+    table_metrics: list[TableMetrics]
 
 
 """
@@ -51,15 +57,21 @@ class BaseMetricWriter(abc.ABC):
         logger.info(f"Setup writer with id: {_id if (_id := self.id) is not None else 'n/a'}")
         sync_over_mesh("writer_setup", self.mesh)
 
-    def __call__(self, step: int, data: PyTree, generations: Optional[list[tuple[list[str], str]]] = None):
+    def __call__(
+        self,
+        step: int,
+        data: PyTree,
+        table_metrics: list[TableMetrics] = [],
+    ):
         """Write metrics. Only primary host performs actual writing.
 
         Args:
             step: Training step number.
             data: PyTree containing metric values.
+            table_metrics: Tables to log alongside this step's metrics.
         """
         if self.is_primary_host:
-            cur_metrics = Metric(step, data, generations)
+            cur_metrics = Metric(step, data, table_metrics)
             self.prev_metric, metric_to_write = cur_metrics, self.prev_metric
 
             if metric_to_write is not None:
@@ -76,14 +88,13 @@ class BaseMetricWriter(abc.ABC):
 
         step = metric.step
         data = metric.data
-        generations = metric.generations
 
-        if generations is not None:
-            self._log_generations(step, generations)
+        for table_metric in metric.table_metrics:
+            self._log_generations(step, table_metric.table, table_metric.table_name)
 
         metric_strs = it.starmap(
             lambda k, v: f"{k}: {convert_to_scalar(v):.4f}",
-            filter(lambda kv: kv[0] in self.metrics_to_print, data.items()),
+            filter(lambda kv: kv[0] in self.metrics_to_print, data.items()),  # type: ignore
         )
         fmt_str = " | ".join((f"Step: {step}", *metric_strs))
         logger.info(fmt_str)
@@ -94,17 +105,6 @@ class BaseMetricWriter(abc.ABC):
         if self.is_primary_host:
             self._finish()
         sync_over_mesh("writer_finish", self.mesh)
-
-    def log_eval_results(self, step: int, eval_metrics: dict[str, dict[str, float]]) -> None:
-        """Log evaluation results independently from training metric writes.
-
-        Args:
-            step: Step associated with the evaluation run.
-            eval_metrics: Mapping of eval task name to metric/value mapping.
-        """
-        if self.is_primary_host:
-            self._log_eval_results(step, eval_metrics)
-        sync_over_mesh("writer_eval_sync", self.mesh)
 
     @property
     def id(self) -> str:
@@ -145,22 +145,13 @@ class BaseMetricWriter(abc.ABC):
         raise NotImplementedError
 
     @abc.abstractmethod
-    def _log_generations(self, step: int, generations: list[tuple[list[str], str]]) -> None:
-        """Log train generations. Called only on primary host.
+    def _log_generations(self, step: int, table: dict[str, list[str]], table_name: str) -> None:
+        """Log a generation table. Called only on primary host.
 
         Args:
             step: Training step number.
-            generations: List of (rollouts, answer) tuples.
-        """
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    def _log_eval_results(self, step: int, eval_metrics: dict[str, dict[str, float]]) -> None:
-        """Log eval results. Called only on primary host.
-
-        Args:
-            step: Step associated with the evaluation run.
-            eval_metrics: Mapping of eval task name to metric/value mapping.
+            table: Mapping of column name to column values, zipped row-wise.
+            table_name: Key the table is logged under.
         """
         raise NotImplementedError
 
@@ -183,8 +174,7 @@ class TextWriter(BaseMetricWriter):
     def _setup_writer(self): ...
     def _async_write_metrics(self, metric: Metric): ...
     def _finish(self) -> None: ...
-    def _log_generations(self, step: int, generations: list[tuple[list[str], str]]) -> None: ...
-    def _log_eval_results(self, step: int, eval_metrics: dict[str, dict[str, float]]) -> None: ...
+    def _log_generations(self, step: int, table: dict[str, list[str]], table_name: str) -> None: ...
     def _id(self) -> int:
         return -1
 
@@ -257,48 +247,24 @@ class WandBWriter(BaseMetricWriter):
         if self._run is not None:
             self._run.finish()
 
-    def _log_generations(self, step: int, generations: list[tuple[list[str], str]]) -> None:
-        """Log train generations as a wandb Table.
-
-        Creates a table with one row per rollout. Each tuple in generations produces
-        len(rollouts) rows, all sharing the same example_index and answer.
+    def _log_generations(self, step: int, table: dict[str, list[str]], table_name: str) -> None:
+        """Log a generation table as a wandb Table.
 
         Args:
             step: Training step number.
-            generations: List of (rollouts, answer) tuples.
+            table: Mapping of column name to column values, zipped row-wise.
+            table_name: Key the table is logged under.
         """
         if self._run is None:
             raise ValueError("run is None")
 
-        table = wandb.Table(columns=["example_index", "rollout_index", "rollout", "answer"])
-        for ex_idx, (rollouts, answer) in enumerate(generations):
-            for ro_idx, rollout in enumerate(rollouts):
-                table.add_data(ex_idx, ro_idx, rollout, answer)
+        assert len(set(len(v) for v in table.values())) == 1, f"{table_name}: all columns must have equal rows"
 
-        self._run.log({"train_generations": table}, step=step)
+        wandb_table = wandb.Table(columns=list(table.keys()))
+        for row in zip(*table.values(), strict=True):
+            wandb_table.add_data(*row)
 
-    def _log_eval_results(self, step: int, eval_metrics: dict[str, dict[str, float]]) -> None:
-        """Log eval results as a wandb Table.
-
-        Creates one row per eval task with a step and task name column,
-        plus one column per metric found across all tasks.
-
-        Args:
-            step: Step associated with the evaluation run.
-            eval_metrics: Mapping of eval task name to metric/value mapping.
-        """
-        if self._run is None:
-            raise ValueError("run is None")
-
-        metric_names = sorted({metric_name for task_metrics in eval_metrics.values() for metric_name in task_metrics})
-        columns = ["step", "eval_task", *metric_names]
-        table = wandb.Table(columns=columns)
-
-        for eval_task, metrics in eval_metrics.items():
-            row = [step, eval_task, *(convert_to_scalar(metrics.get(metric_name)) for metric_name in metric_names)]
-            table.add_data(*row)
-
-        self._run.log({"eval_metrics": table}, step=step)
+        self._run.log({table_name: wandb_table}, step=step)
 
     def _id(self) -> int:
         """Return WandB run ID.

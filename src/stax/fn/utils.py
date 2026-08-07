@@ -16,7 +16,7 @@ SingleStepFn = Callable[[PyTree, tuple[PyTree, ...], bool], Union[Array, Tuple[A
 
 
 class TrainFn(Protocol):
-    def __call__(self, params: Params, opt_state: OptState, *batch: Batch) -> Dict[str, Any]:
+    def __call__(self, params: Params, opt_state: OptState, *batch: Batch, **loss_kwargs) -> Dict[str, Any]:
         """
         Performs a training step, including gradient calculation and parameter updates.
 
@@ -24,6 +24,8 @@ class TrainFn(Protocol):
             params (Params): Current model parameters.
             opt_state (OptState): Current optimizer state.
             *batch (Batch): The input batch.
+            **loss_kwargs: Additional keyword arguments for the loss function.
+
         Returns:
             Dict[str, Any]: A dictionary containing updated 'metrics', 'params', and 'opt_state'.
         """
@@ -31,13 +33,14 @@ class TrainFn(Protocol):
 
 
 class ValFn(Protocol):
-    def __call__(self, params: Params, *batch: Batch) -> Metrics:
+    def __call__(self, params: Params, *batch: Batch, **loss_kwargs) -> Metrics:
         """
         Performs a validation step over batches.
 
         Args:
             params (Params): Current model parameters.
             *batch (Batch): The input batch.
+            **loss_kwargs: Additional keyword arguments for the loss function.
         Returns:
             Metrics: A dictionary of averaged metrics.
         """
