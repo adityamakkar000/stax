@@ -174,7 +174,7 @@ def get_perf_func(trace_path, func: JitWrapped, *args, **kwargs) -> dict[str, Py
         kwargs: Keyword arguments to pass to the function.
 
     """
-    compiled_fn = func.lower(*args, **kwargs).compile({"xla_enable_transpose_trace": True})
+    compiled_fn = func.lower(*args, **kwargs).compile()
     trace_path = trace_path if get_rank() == 0 else None
 
     def run(*args, **kwargs):
