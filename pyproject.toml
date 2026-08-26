@@ -15,7 +15,7 @@ dependencies = [
     "etils[epath]>=1.14.0",
     "flax>=0.11.0",
     "jax==0.8.3",
-    "jaxtyping>=0.3.3",
+    "jaxtyping",
     "loguru>=0.7.3",
     "orbax-checkpoint>=0.11.36",
     "pre-commit>=4.5.1",

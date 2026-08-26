@@ -5,7 +5,6 @@ import jax
 import numpy as np
 from jax._src import array, core, sharding_impls
 from jax._src.interpreters import pxla
-from jax._src import sharding_impls
 from jax.experimental.multihost_utils import _psum, host_local_array_to_global_array
 from jax.sharding import PartitionSpec as P
 
@@ -80,6 +79,7 @@ def _handle_array_process_allgather(inp, tiled, global_mesh: jax.sharding.Mesh |
             host_np_arr = np.expand_dims(host_np_arr, axis=0)
 
         aval = core.ShapedArray(host_np_arr.shape, host_np_arr.dtype)
+        pspec = sharding_impls.prepare_axis_resources(pspec, "pspec to array_mapping")
         global_aval = pxla.mesh_local_to_global(global_mesh, sharding_impls.get_array_mapping(pspec), aval)  
 
         bufs = [jax.device_put(host_np_arr, d) for d in jax.local_devices()]
