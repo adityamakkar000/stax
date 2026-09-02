@@ -122,16 +122,16 @@ def get_steps_fn(
     step_fn: StepFn,
     model: modelBase,
     tx: optax.GradientTransformation,
+    sharding: ShardingConfig,
     has_aux: bool = True,
     grad_steps: int = 1,
     reduce_fn: Callable[[int | Array, Batch], int | Array] = lambda s, b: s + 1,
     val_steps: int = 1,
-    sharding: ShardingConfig = ShardingConfig(),
     devices: Optional[np.ndarray] = None,
     **jit_kwargs,
 ) -> Tuple[TrainFn, ValFn, Shardings]:
     """
-    Creates JIT-compiled training and validation functions, optionally with sharding.
+    Creates JIT-compiled training and validation functions
 
     Args:
         step_fn: The step function taking (model, params, *batch, train).
@@ -152,7 +152,7 @@ def get_steps_fn(
     """
     single_step = partial(step_fn, model)
 
-    mesh = setup_mesh((sharding.dp_group_size, sharding.fsdp_group_size, sharding.cp_group_size), devices=devices)
+    mesh = setup_mesh(sharding.mesh_config, devices=devices)
 
     shardings = get_sharding(mesh, sharding)
     train_shardings = {

@@ -14,9 +14,17 @@ from stax.utils import is_key
 
 
 @dataclass
+class MeshConfig:
+    dp: int = 1
+    fsdp: int = -1
+    cp_ulysses: int = 1
+
+@dataclass
 class ShardingConfig:
-    params_shape: PyTree[jax.ShapeDtypeStruct] = jax.ShapeDtypeStruct((1,), jnp.float32)
-    opt_state_shape: PyTree[jax.ShapeDtypeStruct] = jax.ShapeDtypeStruct((1,), jnp.float32)
+    params_shape: PyTree[jax.ShapeDtypeStruct]
+    opt_state_shape: PyTree[jax.ShapeDtypeStruct] 
+    
+    mesh_config: MeshConfig
 
     # TODO: fix this
     # params_offload: bool = False
@@ -24,14 +32,10 @@ class ShardingConfig:
     # dp options
     data_shard_dim: int = 0
     # fsdp options
-    min_bytes_for_fsdp: int = int(1e6)  # 1e6/(1024*1024) = 1MB
+    min_bytes_for_fsdp: int = int(1e7)  # 1e7/(1024*1024) = 10MB
     weight_shard_dim: int = 0
     # cp options
     cp_shard_dim: int = 0
-
-    dp_group_size: int = 1
-    cp_group_size: int = 1
-    fsdp_group_size: int = -1
 
 
 @dataclass
@@ -46,7 +50,7 @@ class Shardings:
 class AXIS_NAMES_ENUM(enum.Enum):
     DP = "dp"
     FSDP = "fsdp"
-    CP = "cp"
+    CP_ULYSSES = "cp_ulysses"
 
     @classmethod
     def batch_mesh(cls):
@@ -54,7 +58,7 @@ class AXIS_NAMES_ENUM(enum.Enum):
 
     @classmethod
     def full_mesh(cls):
-        return (cls.DP.value, cls.FSDP.value, cls.CP.value)
+        return (cls.DP.value, cls.FSDP.value, cls.CP_ULYSSES.value)
 
 
 def resolve_axis_sizes(axis_sizes: tuple[int, ...], n_devices: int) -> tuple[int, ...]:
@@ -71,13 +75,15 @@ def resolve_axis_sizes(axis_sizes: tuple[int, ...], n_devices: int) -> tuple[int
     return tuple(axis_sizes_list)
 
 
-def setup_mesh(axis_sizes: tuple[int, ...], devices: np.ndarray | None = None):
+def setup_mesh(mesh_config: MeshConfig, devices: np.ndarray | None = None):
     if not jax.distributed.is_initialized():
         raise ValueError("jax distributed has not been initialized")
-
+    
     if devices is None:
         devices = np.array(jax.devices())
     n_devices = np.prod(devices.shape)
+
+    axis_sizes = (mesh_config.dp, mesh_config.fsdp, mesh_config.cp_ulysses)
 
     axis_type = (jax.sharding.AxisType.Auto, jax.sharding.AxisType.Auto, jax.sharding.AxisType.Auto)
     axis_sizes = resolve_axis_sizes(axis_sizes, n_devices)
@@ -127,25 +133,31 @@ def get_sharding(mesh: Mesh, config: ShardingConfig) -> Shardings:
                     data_tuple[config.data_shard_dim] = (
                         AXIS_NAMES_ENUM.DP.value,
                         AXIS_NAMES_ENUM.FSDP.value,
-                        AXIS_NAMES_ENUM.CP.value,
+                        AXIS_NAMES_ENUM.CP_ULYSSES.value,
                     )
                 else:
                     data_tuple[config.data_shard_dim] = (AXIS_NAMES_ENUM.DP.value, AXIS_NAMES_ENUM.FSDP.value)
-                    data_tuple[config.cp_shard_dim] = AXIS_NAMES_ENUM.CP.value
+                    data_tuple[config.cp_shard_dim] = AXIS_NAMES_ENUM.CP_ULYSSES.value
 
-            data_sharding = NamedSharding(
+            target_data_sharding = NamedSharding(
                 mesh,
                 P(
                     *data_tuple,
                 ),
             )
+            global_sharding = [None] * config.data_shard_dim + [((AXIS_NAMES_ENUM.DP.value, AXIS_NAMES_ENUM.FSDP.value, AXIS_NAMES_ENUM.CP_ULYSSES.value))]
+            global_data_sharding = NamedSharding(mesh, P(*global_sharding))
+
             num_hosts = mesh.devices.size // jax.local_device_count()
-            x_shape = (
+            global_x_shape= (
                 *x.shape[: config.data_shard_dim],
                 x.shape[config.data_shard_dim] * num_hosts,
                 *x.shape[config.data_shard_dim + 1 :],
             )
-            return jax.make_array_from_process_local_data(data_sharding, x, x_shape)
+
+            global_x = jax.make_array_from_process_local_data(global_data_sharding, x, global_x_shape)
+            target_x =  jax.device_put(global_x, target_data_sharding)
+            return target_x
 
         return jax.tree.map(put_batch_fn, batch)
 
