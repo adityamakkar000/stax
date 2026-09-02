@@ -19,11 +19,12 @@ class MeshConfig:
     fsdp: int = -1
     cp_ulysses: int = 1
 
+
 @dataclass
 class ShardingConfig:
     params_shape: PyTree[jax.ShapeDtypeStruct]
-    opt_state_shape: PyTree[jax.ShapeDtypeStruct] 
-    
+    opt_state_shape: PyTree[jax.ShapeDtypeStruct]
+
     mesh_config: MeshConfig
 
     # TODO: fix this
@@ -78,7 +79,7 @@ def resolve_axis_sizes(axis_sizes: tuple[int, ...], n_devices: int) -> tuple[int
 def setup_mesh(mesh_config: MeshConfig, devices: np.ndarray | None = None):
     if not jax.distributed.is_initialized():
         raise ValueError("jax distributed has not been initialized")
-    
+
     if devices is None:
         devices = np.array(jax.devices())
     n_devices = np.prod(devices.shape)
@@ -145,18 +146,20 @@ def get_sharding(mesh: Mesh, config: ShardingConfig) -> Shardings:
                     *data_tuple,
                 ),
             )
-            global_sharding = [None] * config.data_shard_dim + [((AXIS_NAMES_ENUM.DP.value, AXIS_NAMES_ENUM.FSDP.value, AXIS_NAMES_ENUM.CP_ULYSSES.value))]
+            global_sharding = [None] * config.data_shard_dim + [
+                ((AXIS_NAMES_ENUM.DP.value, AXIS_NAMES_ENUM.FSDP.value, AXIS_NAMES_ENUM.CP_ULYSSES.value))
+            ]
             global_data_sharding = NamedSharding(mesh, P(*global_sharding))
 
             num_hosts = mesh.devices.size // jax.local_device_count()
-            global_x_shape= (
+            global_x_shape = (
                 *x.shape[: config.data_shard_dim],
                 x.shape[config.data_shard_dim] * num_hosts,
                 *x.shape[config.data_shard_dim + 1 :],
             )
 
             global_x = jax.make_array_from_process_local_data(global_data_sharding, x, global_x_shape)
-            target_x =  jax.device_put(global_x, target_data_sharding)
+            target_x = jax.device_put(global_x, target_data_sharding)
             return target_x
 
         return jax.tree.map(put_batch_fn, batch)

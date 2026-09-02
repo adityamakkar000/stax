@@ -80,7 +80,7 @@ def _handle_array_process_allgather(inp, tiled, global_mesh: jax.sharding.Mesh |
 
         aval = core.ShapedArray(host_np_arr.shape, host_np_arr.dtype)
         pspec = sharding_impls.prepare_axis_resources(pspec, "pspec to array_mapping")
-        global_aval = pxla.mesh_local_to_global(global_mesh, sharding_impls.get_array_mapping(pspec), aval)   # type: ignore
+        global_aval = pxla.mesh_local_to_global(global_mesh, sharding_impls.get_array_mapping(pspec), aval)  # type: ignore
 
         bufs = [jax.device_put(host_np_arr, d) for d in jax.local_devices()]
         global_arr = array.make_array_from_single_device_arrays(global_aval.shape, s, bufs)
