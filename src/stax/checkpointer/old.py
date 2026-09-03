@@ -26,7 +26,9 @@ def parent_dir(filename):
 def name(filename):
     return filename.rsplit("/", 1)[1]
 
-
+"""
+based on https://github.com/danijar/elements/blob/main/elements/checkpoint.py
+"""
 class Checkpoint:
     def __init__(self, filename):
         self._filename = filename
@@ -209,6 +211,7 @@ class OldCheckpointer:
         max_to_keep: int = 1,
         *,
         train_mesh: jax.sharding.Mesh | None = None,
+        keep_every: int | None = None 
     ):
         if not output_dir.startswith("gs"):
             raise AssertionError("output_dir must be a valid GCS path starting with gs")
@@ -217,6 +220,7 @@ class OldCheckpointer:
         if not self.output_dir.endswith("/"):
             self.output_dir = self.output_dir + "/"
         self.max_to_keep = max_to_keep
+        self.keep_every = keep_every
         self.train_mesh = train_mesh
         self.directory = epath.Path(self.output_dir)
         self.rank = get_rank()
@@ -277,21 +281,28 @@ class OldCheckpointer:
 
     def _maybe_delete_old_checkpoints(self):
         if self.rank == 0:
-            dirs = [f for f in self.directory.iterdir() if f.is_dir() and f.name.isdigit()]
-            dirs = sorted(dirs, key=lambda x: int(x.name))
+            dirs = self.get_dirs()
+            if dirs is None:
+                return 
             if self.max_to_keep > 0 and len(dirs) > self.max_to_keep:
                 to_delete = dirs[: -self.max_to_keep]
                 for d in to_delete:
+                    if self.keep_every and int(d.name) % self.keep_every:
+                        logger.info(f"[checkpointer] Keeping old checkpoint directory by keep_every policy: {d}")
+                        continue 
                     logger.info(f"[checkpointer] Deleting old checkpoint directory: {d}")
                     d.rmtree()
 
-    @property
-    def latest_step(self) -> int | None:
-        """Get the latest checkpoint."""
+    def get_dirs(self) -> list[epath.Path] | None:
         if not self.directory.exists():
             return None
         dirs = [f for f in self.directory.iterdir() if f.is_dir() and f.name.isdigit()]
         dirs = sorted(dirs, key=lambda x: int(x.name))
-        if not dirs:
+        return dirs
+
+    @property
+    def latest_step(self) -> int | None:
+        ds = self.get_dirs()
+        if not ds:
             return None
-        return int(dirs[-1].name)
+        return int(ds[-1].name)
