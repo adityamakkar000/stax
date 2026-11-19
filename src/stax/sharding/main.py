@@ -3,7 +3,6 @@ from dataclasses import dataclass
 from typing import Callable
 
 import jax
-import jax.numpy as jnp
 import numpy as np
 from jax.sharding import Mesh, NamedSharding
 from jax.sharding import PartitionSpec as P
@@ -34,7 +33,7 @@ class ShardingConfig:
     data_shard_dim: int = 0
     # fsdp options
     min_bytes_for_fsdp: int = int(1e7)  # 1e7/(1024*1024) = 10MB
-    weight_shard_dim: int = 0
+    weight_shard_fn: Callable[[str, Array], int | None] = lambda _path, param: 0 if param.ndim >= 2 else None
     # cp options
     cp_shard_dim: int = 0
 
@@ -109,16 +108,18 @@ def get_sharding(mesh: Mesh, config: ShardingConfig) -> Shardings:
 
     replicate_sharding = NamedSharding(mesh, P())
 
-    def shard_param(param):
-        if param.ndim < 2 or jnp.dtype(param.dtype).itemsize * param.size < config.min_bytes_for_fsdp:
-            shard = replicate_sharding
-        else:
-            param_tuple = [None for _ in range(config.weight_shard_dim)] + [AXIS_NAMES_ENUM.FSDP.value]
-            shard = NamedSharding(mesh, P(*(param_tuple)))
+    def shard_param(path, param: Array):
+        if (param.size * param.dtype.itemsize) < config.min_bytes_for_fsdp:
+            return replicate_sharding
+        axis_dim = config.weight_shard_fn(jax.tree_util.keystr(path), param)
+        if axis_dim is None: 
+            return replicate_sharding
+        param_tuple = [None] * axis_dim + [AXIS_NAMES_ENUM.FSDP.value]
+        shard = NamedSharding(mesh, P(*(param_tuple)))
         return shard
 
-    param_sharding = jax.tree.map(shard_param, config.params_shape)
-    opt_state_sharding = jax.tree.map(shard_param, config.opt_state_shape)
+    param_sharding = jax.tree.map_with_path(shard_param, config.params_shape)
+    opt_state_sharding = jax.tree.map_with_path(shard_param, config.opt_state_shape)
     metrics_sharding = replicate_sharding
 
     def shard_data(batch: PyTree) -> PyTree:
