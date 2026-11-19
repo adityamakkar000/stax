@@ -1,7 +1,7 @@
 import abc
 import itertools as it
 import random
-from dataclasses import Field, dataclass
+from dataclasses import dataclass
 from typing import Any, Mapping, Optional
 
 import jax
@@ -36,16 +36,22 @@ performs actual logging to avoid duplication.
 class BaseMetricWriter(abc.ABC):
     """Base writer that only writes from the primary host in multihost environments."""
 
-    def __init__(self, metrics_to_print: list[str] = ["loss"], mesh: jax.sharding.Mesh | None = None):
+    def __init__(
+        self, metrics_to_print: list[str] = ["loss"], mesh: jax.sharding.Mesh | None = None, lag_one_step: bool = True
+    ):
         """Initialize the metric writer.
 
         Args:
             metrics_to_print: List of metric names to print to console.
             mesh: The JAX sharding mesh.
+            lag_one_step: If True, each call writes the previous step's metrics instead of the
+                current ones, so logging doesn't block on the current step's device computation.
+                The final metric is flushed in `finish()`. If False, metrics are written immediately.
         """
         self.metrics_to_print = metrics_to_print
         self.prev_metric: None | Metric = None
         self.mesh = mesh
+        self.lag_one_step = lag_one_step
 
         self._run = None
         if self.is_primary_host:
@@ -72,7 +78,10 @@ class BaseMetricWriter(abc.ABC):
         """
         if self.is_primary_host:
             cur_metrics = Metric(step, data, table_metrics)
-            self.prev_metric, metric_to_write = cur_metrics, self.prev_metric
+            if self.lag_one_step:
+                self.prev_metric, metric_to_write = cur_metrics, self.prev_metric
+            else:
+                metric_to_write = cur_metrics
 
             if metric_to_write is not None:
                 self._async_write_metrics(metric_to_write)
@@ -94,14 +103,15 @@ class BaseMetricWriter(abc.ABC):
 
         metric_strs = it.starmap(
             lambda k, v: f"{k}: {convert_to_scalar(v):.4f}",
-            filter(lambda kv: kv[0] in self.metrics_to_print, data.items()),  # type: ignore
+            filter(lambda kv: kv[0] in self.metrics_to_print, data.items()),
         )
         fmt_str = " | ".join((f"Step: {step}", *metric_strs))
         logger.info(fmt_str)
 
     def finish(self):
         """Finish writing. Only primary host performs cleanup."""
-        self(step=-1, data={})  # flush last metric
+        if self.lag_one_step:
+            self(step=-1, data={})  # flush last metric
         if self.is_primary_host:
             self._finish()
         sync_over_mesh("writer_finish", self.mesh)
