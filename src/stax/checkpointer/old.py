@@ -1,4 +1,5 @@
 import asyncio
+import json
 import os
 import pickle
 import shutil
@@ -16,6 +17,7 @@ from stax.multihost_utils import process_allgather_over_mesh, sync_over_mesh
 from stax.utils import get_rank
 
 GB = 1024**3
+COMMIT_FILE = "COMMITTED"
 CONCURRENT_CHUNK_LIMIT = 8
 
 
@@ -25,6 +27,23 @@ def parent_dir(filename):
 
 def name(filename):
     return filename.rsplit("/", 1)[1]
+
+
+def _write_text(path, text):
+    if "gs://" in path:
+        with tf.io.gfile.GFile(path, "w") as f:
+            f.write(text)
+    else:
+        with open(path, "w") as f:
+            f.write(text)
+
+
+def _read_text(path):
+    if "gs://" in path:
+        with tf.io.gfile.GFile(path, "r") as f:
+            return f.read()
+    with open(path) as f:
+        return f.read()
 
 """
 based on https://github.com/danijar/elements/blob/main/elements/checkpoint.py
@@ -122,8 +141,10 @@ class Checkpoint:
             tasks.append(asyncio.to_thread(_write_treedef))
 
             await asyncio.gather(*tasks)
+            return total_chunks
 
-        asyncio.run(_upload_all_chunks())
+        total_chunks = asyncio.run(_upload_all_chunks())
+        _write_text(f"{filename}/{COMMIT_FILE}", json.dumps({"chunks": total_chunks, "timestamp": time.time()}))
 
         elapsed = time.time() - start_time
         logger.info(f"[checkpointer] Successfully wrote chunked checkpoint asynchronously in {elapsed:.3f}s.")
@@ -163,22 +184,8 @@ class Checkpoint:
         treedef_path = f"{filename}/treedef.pkl"
         treedef = pickle.loads(await asyncio.to_thread(_read_bytes, treedef_path))
 
-        def _list_chunk_indices():
-            entries = tf.io.gfile.listdir(filename) if is_gcs else os.listdir(filename)
-            indices = []
-            for entry in entries:
-                stripped = entry.rstrip("/")
-                if stripped.startswith("chunk_") and stripped.endswith(".pkl"):
-                    indices.append(int(stripped[len("chunk_") : -len(".pkl")]))
-            return sorted(indices)
-
-        chunk_indices = await asyncio.to_thread(_list_chunk_indices)
-        if chunk_indices != list(range(len(chunk_indices))):
-            raise ValueError(
-                f"Checkpoint at {filename} has missing/unexpected chunks; "
-                f"found indices {chunk_indices}, expected a contiguous range "
-                f"starting at 0."
-            )
+        commit = json.loads(await asyncio.to_thread(_read_text, f"{filename}/{COMMIT_FILE}"))
+        chunk_indices = list(range(commit["chunks"]))
 
         sem = asyncio.Semaphore(CONCURRENT_CHUNK_LIMIT)
 
@@ -255,6 +262,10 @@ class OldCheckpointer:
             filename = f"{self.output_dir}{step}"
 
             def _write():
+                target = epath.Path(filename)
+                if target.exists():
+                    logger.info(f"[checkpointer] Removing leftover directory before saving: {target}")
+                    target.rmtree()
                 checkpoint = Checkpoint(filename)
                 checkpoint.data = data
                 checkpoint.save()
@@ -280,18 +291,29 @@ class OldCheckpointer:
         return data["checkpoint_data"], data["metadata"]
 
     def _maybe_delete_old_checkpoints(self):
-        if self.rank == 0:
-            dirs = self.get_dirs()
-            if dirs is None:
-                return 
-            if self.max_to_keep > 0 and len(dirs) > self.max_to_keep:
-                to_delete = dirs[: -self.max_to_keep]
-                for d in to_delete:
-                    if self.keep_every and int(d.name) % self.keep_every:
-                        logger.info(f"[checkpointer] Keeping old checkpoint directory by keep_every policy: {d}")
-                        continue 
-                    logger.info(f"[checkpointer] Deleting old checkpoint directory: {d}")
+        if self.rank != 0:
+            return
+        dirs = self.get_dirs()
+        if dirs is None:
+            return
+        committed = [d for d in dirs if self.is_committed(d)]
+        if committed:
+            newest = int(committed[-1].name)
+            for d in dirs:
+                if int(d.name) < newest and not self.is_committed(d):
+                    logger.info(f"[checkpointer] Deleting incomplete checkpoint directory: {d}")
                     d.rmtree()
+        if self.max_to_keep > 0 and len(committed) > self.max_to_keep:
+            for d in committed[: -self.max_to_keep]:
+                if self.keep_every and int(d.name) % self.keep_every == 0:
+                    logger.info(f"[checkpointer] Keeping old checkpoint directory by keep_every policy: {d}")
+                    continue
+                logger.info(f"[checkpointer] Deleting old checkpoint directory: {d}")
+                d.rmtree()
+
+    @staticmethod
+    def is_committed(d: epath.Path) -> bool:
+        return (d / COMMIT_FILE).exists()
 
     def get_dirs(self) -> list[epath.Path] | None:
         if not self.directory.exists():
@@ -300,9 +322,12 @@ class OldCheckpointer:
         dirs = sorted(dirs, key=lambda x: int(x.name))
         return dirs
 
+    def committed_dirs(self) -> list[epath.Path]:
+        return [d for d in self.get_dirs() or [] if self.is_committed(d)]
+
     @property
     def latest_step(self) -> int | None:
-        ds = self.get_dirs()
+        ds = self.committed_dirs()
         if not ds:
             return None
         return int(ds[-1].name)
