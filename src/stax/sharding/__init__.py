@@ -1,9 +1,12 @@
-from stax.sharding.main import MeshConfig, ShardingConfig, Shardings, get_sharding, setup_mesh
+from stax.sharding.config import AXIS_NAMES, MeshConfig, ModelSharding, ShardingConfig, Shardings
+from stax.sharding.main import get_sharding, setup_mesh
 
 __all__ = [
-    "setup_mesh",
-    "get_sharding",
+    "AXIS_NAMES",
+    "MeshConfig",
+    "ModelSharding",
     "ShardingConfig",
     "Shardings",
-    "MeshConfig"
+    "get_sharding",
+    "setup_mesh",
 ]

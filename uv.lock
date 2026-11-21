@@ -2298,7 +2298,7 @@ dependencies = [
 requires-dist = [
     { name = "etils", extras = ["epath"], specifier = ">=1.14.0" },
     { name = "flax", specifier = ">=0.11.0" },
-    { name = "jax", specifier = "==0.8.3" },
+    { name = "jax", specifier = ">=0.8.0" },
     { name = "jaxtyping" },
     { name = "loguru", specifier = ">=0.7.3" },
     { name = "orbax-checkpoint", specifier = ">=0.11.36" },

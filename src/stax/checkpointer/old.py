@@ -45,9 +45,12 @@ def _read_text(path):
     with open(path) as f:
         return f.read()
 
+
 """
 based on https://github.com/danijar/elements/blob/main/elements/checkpoint.py
 """
+
+
 class Checkpoint:
     def __init__(self, filename):
         self._filename = filename
@@ -218,7 +221,7 @@ class OldCheckpointer:
         max_to_keep: int = 1,
         *,
         train_mesh: jax.sharding.Mesh | None = None,
-        keep_every: int | None = None 
+        keep_every: int | None = None,
     ):
         if not output_dir.startswith("gs"):
             raise AssertionError("output_dir must be a valid GCS path starting with gs")
@@ -263,8 +266,11 @@ class OldCheckpointer:
 
             def _write():
                 target = epath.Path(filename)
+                if self.is_committed(target):
+                    logger.warning(f"[checkpointer] Step {step} is already committed at {target}, not overwriting it.")
+                    return
                 if target.exists():
-                    logger.info(f"[checkpointer] Removing leftover directory before saving: {target}")
+                    logger.info(f"[checkpointer] Removing incomplete directory before saving: {target}")
                     target.rmtree()
                 checkpoint = Checkpoint(filename)
                 checkpoint.data = data
