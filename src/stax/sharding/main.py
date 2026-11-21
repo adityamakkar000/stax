@@ -1,7 +1,3 @@
-import enum
-from dataclasses import dataclass
-from typing import Callable
-
 import jax
 import numpy as np
 from jax.sharding import Mesh, NamedSharding
@@ -9,56 +5,8 @@ from jax.sharding import PartitionSpec as P
 from jaxtyping import Array, PyTree
 
 from stax.logger import staxLogger as logger
+from stax.sharding.config import AXIS_NAMES, MeshConfig, ShardingConfig, Shardings
 from stax.utils import is_key
-
-
-@dataclass
-class MeshConfig:
-    dp: int = 1
-    fsdp: int = -1
-    cp_ulysses: int = 1
-
-
-@dataclass
-class ShardingConfig:
-    params_shape: PyTree[jax.ShapeDtypeStruct]
-    opt_state_shape: PyTree[jax.ShapeDtypeStruct]
-
-    mesh_config: MeshConfig
-
-    # TODO: fix this
-    # params_offload: bool = False
-    opt_state_offload: bool = False
-    # dp options
-    data_shard_dim: int = 0
-    # fsdp options
-    min_bytes_for_fsdp: int = int(1e7)  # 1e7/(1024*1024) = 10MB
-    weight_shard_fn: Callable[[str, Array], int | None] = lambda _path, param: 0 if param.ndim >= 2 else None
-    # cp options
-    cp_shard_dim: int = 0
-
-
-@dataclass
-class Shardings:
-    param_sharding: PyTree[NamedSharding]
-    opt_state_sharding: PyTree[NamedSharding]
-    metrics_sharding: NamedSharding
-    shard_data: Callable[[PyTree], PyTree]
-    mesh: jax.sharding.Mesh
-
-
-class AXIS_NAMES_ENUM(enum.Enum):
-    DP = "dp"
-    FSDP = "fsdp"
-    CP_ULYSSES = "cp_ulysses"
-
-    @classmethod
-    def batch_mesh(cls):
-        return ()
-
-    @classmethod
-    def full_mesh(cls):
-        return (cls.DP.value, cls.FSDP.value, cls.CP_ULYSSES.value)
 
 
 def resolve_axis_sizes(axis_sizes: tuple[int, ...], n_devices: int) -> tuple[int, ...]:
@@ -83,11 +31,11 @@ def setup_mesh(mesh_config: MeshConfig, devices: np.ndarray | None = None):
         devices = np.array(jax.devices())
     n_devices = np.prod(devices.shape)
 
-    axis_sizes = (mesh_config.dp, mesh_config.fsdp, mesh_config.cp_ulysses)
+    axis_sizes = mesh_config.axes
 
-    axis_type = (jax.sharding.AxisType.Auto, jax.sharding.AxisType.Auto, jax.sharding.AxisType.Auto)
+    axis_type = (jax.sharding.AxisType.Auto,) * len(axis_sizes)
     axis_sizes = resolve_axis_sizes(axis_sizes, n_devices)
-    axis_names = AXIS_NAMES_ENUM.full_mesh()
+    axis_names = AXIS_NAMES.full_mesh()
 
     try:
         mesh = jax.make_mesh(axis_sizes, axis_names, axis_type, devices=list(devices))
@@ -104,19 +52,24 @@ def setup_mesh(mesh_config: MeshConfig, devices: np.ndarray | None = None):
 
 def get_sharding(mesh: Mesh, config: ShardingConfig) -> Shardings:
     """Adapted from https://github.com/kvfrans/jaxtransformer"""
-    assert len(mesh.axis_names) == 3, "mesh should have three axes: dp, fsdp, cp"
+    assert tuple(mesh.axis_names) == AXIS_NAMES.full_mesh(), f"mesh axes {mesh.axis_names} != {AXIS_NAMES.full_mesh()}"
 
     replicate_sharding = NamedSharding(mesh, P())
 
     def shard_param(path, param: Array):
         if (param.size * param.dtype.itemsize) < config.min_bytes_for_fsdp:
             return replicate_sharding
-        axis_dim = config.weight_shard_fn(jax.tree_util.keystr(path), param)
-        if axis_dim is None: 
-            return replicate_sharding
-        param_tuple = [None] * axis_dim + [AXIS_NAMES_ENUM.FSDP.value]
-        shard = NamedSharding(mesh, P(*(param_tuple)))
-        return shard
+        path_str = jax.tree_util.keystr(path)
+        pspec = config.weight_shard_fn(path_str, param).pspec
+        if len(pspec) > param.ndim:
+            raise ValueError(f"{path_str}: sharding {pspec} has more dims than param shape {param.shape}")
+        for dim, axis in enumerate(pspec):
+            if axis is not None and param.shape[dim] % mesh.shape[axis] != 0:
+                raise ValueError(
+                    f"{path_str}: dim {dim} (size {param.shape[dim]}) not divisible by mesh axis '{axis}' "
+                    f"(size {mesh.shape[axis]})"
+                )
+        return NamedSharding(mesh, pspec)
 
     param_sharding = jax.tree.map_with_path(shard_param, config.params_shape)
     opt_state_sharding = jax.tree.map_with_path(shard_param, config.opt_state_shape)
@@ -129,27 +82,16 @@ def get_sharding(mesh: Mesh, config: ShardingConfig) -> Shardings:
 
             data_tuple = [None for _ in range(x.ndim)]
             if x.ndim == 1:
-                data_tuple[0] = (AXIS_NAMES_ENUM.DP.value, AXIS_NAMES_ENUM.FSDP.value)
+                data_tuple[0] = AXIS_NAMES.data_parallel_mesh()
             else:
                 if config.cp_shard_dim == config.data_shard_dim:
-                    data_tuple[config.data_shard_dim] = (
-                        AXIS_NAMES_ENUM.DP.value,
-                        AXIS_NAMES_ENUM.FSDP.value,
-                        AXIS_NAMES_ENUM.CP_ULYSSES.value,
-                    )
+                    data_tuple[config.data_shard_dim] = AXIS_NAMES.data_mesh()
                 else:
-                    data_tuple[config.data_shard_dim] = (AXIS_NAMES_ENUM.DP.value, AXIS_NAMES_ENUM.FSDP.value)
-                    data_tuple[config.cp_shard_dim] = AXIS_NAMES_ENUM.CP_ULYSSES.value
+                    data_tuple[config.data_shard_dim] = AXIS_NAMES.data_parallel_mesh()
+                    data_tuple[config.cp_shard_dim] = AXIS_NAMES.context_parallel_mesh()
 
-            target_data_sharding = NamedSharding(
-                mesh,
-                P(
-                    *data_tuple,
-                ),
-            )
-            global_sharding = [None] * config.data_shard_dim + [
-                ((AXIS_NAMES_ENUM.DP.value, AXIS_NAMES_ENUM.FSDP.value, AXIS_NAMES_ENUM.CP_ULYSSES.value))
-            ]
+            target_data_sharding = NamedSharding(mesh, P(*data_tuple))
+            global_sharding = [None] * config.data_shard_dim + [AXIS_NAMES.full_mesh()]
             global_data_sharding = NamedSharding(mesh, P(*global_sharding))
 
             num_hosts = mesh.devices.size // jax.local_device_count()
