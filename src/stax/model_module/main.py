@@ -16,16 +16,16 @@ class modelBase(abc.ABC):
 
     @abc.abstractmethod
     def init_state(
-        self, rng: Array, tx: Optional[GradientTransformation], *, sharding: Shardings | None = None
+        self, rng: Array, tx: GradientTransformation, *, sharding: Shardings | None = None
     ) -> PyTree:
         """
         Initialize model weights and optimizer state.
         Args:
             rng (Array): JAX random key for initialization.
-            tx (Optional[GradientTransformation]): Optax gradient transformation (optimizer).
+            tx (GradientTransformation): Optax gradient transformation (optimizer).
             sharding (Shardings | None): Shardings from `get_sharding` / `get_steps_fn`. If not provided then abstract evaluation of model state.
         Returns:
-            PyTree: Initialized model weights and optimizer state if tx is provided, otherwise just model weights.
+            PyTree: Initialized model weights and optimizer state.
         """
 
         raise NotImplementedError("This function hasn't been implemented yet")
