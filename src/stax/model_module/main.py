@@ -1,12 +1,11 @@
 import abc
-from typing import Optional, Union
+from typing import Optional
 
 import jax
-from jax.sharding import Sharding
 from jaxtyping import Array, PyTree
 from optax import GradientTransformation
 
-shardingType = Optional[Union[Sharding, tuple[Sharding, ...]]]
+from stax.sharding import Shardings
 
 
 class modelBase(abc.ABC):
@@ -17,13 +16,14 @@ class modelBase(abc.ABC):
 
     @abc.abstractmethod
     def init_state(
-        self, rng: Array, tx: Optional[GradientTransformation], *, sharding: shardingType = None, abstract: bool = False
+        self, rng: Array, tx: Optional[GradientTransformation], *, sharding: Shardings | None = None
     ) -> PyTree:
         """
         Initialize model weights and optimizer state.
         Args:
-            key (Array): JAX random key for initialization.
+            rng (Array): JAX random key for initialization.
             tx (Optional[GradientTransformation]): Optax gradient transformation (optimizer).
+            sharding (Shardings | None): Shardings from `get_sharding` / `get_steps_fn`. If not provided then abstract evaluation of model state.
         Returns:
             PyTree: Initialized model weights and optimizer state if tx is provided, otherwise just model weights.
         """
