@@ -4,7 +4,9 @@ import jax
 import orbax.checkpoint as ocp
 from etils import epath
 from jaxtyping import PyTree
+from orbax.checkpoint._src.metadata import array_metadata_store
 from orbax.checkpoint._src.multihost import multihost as ocp_multihost
+from orbax.checkpoint._src.serialization import jax_array_handlers
 
 from stax.logger import staxLogger as logger
 from stax.multihost_utils import sync_over_mesh
@@ -19,6 +21,24 @@ def to_abstract(x: Any) -> jax.ShapeDtypeStruct | int | float:
 
 def init_dist_ids():
     ocp_multihost.use_experimental_distributed_process_id = lambda: True
+
+
+def allow_single_active_process():
+    class ActiveProcessCount:
+        process_count = staticmethod(lambda: 1)
+
+        def __getattr__(self, name):
+            return getattr(jax, name)
+
+    jax_array_handlers.jax = ActiveProcessCount()
+    array_metadata_store.Validator._validate_process_count = lambda self, *, ref_process_index: None
+
+
+def make_item_handlers(mp_options: ocp.options.MultiprocessingOptions) -> dict[str, ocp.CheckpointHandler]:
+    return {
+        "state": ocp.StandardCheckpointHandler(multiprocessing_options=mp_options),
+        "metadata": ocp.JsonCheckpointHandler(multiprocessing_options=mp_options),
+    }
 
 
 class Checkpointer:
@@ -47,6 +67,7 @@ class Checkpointer:
         *,
         active_processes: Optional[set[int]] = None,
         train_mesh: Optional[jax.sharding.Mesh] = None,
+        keep_every: Optional[int] = None,
     ) -> None:
         """Initialize the Checkpointer.
 
@@ -57,6 +78,7 @@ class Checkpointer:
                 if best_key is provided, ensure that the metrics dict passed in as metadata contains this key.
             best_mode (str, optional): 'min' or 'max' to indicate whether lower or higher values of best_key are better. Defaults to 'min'.
             active_processes (set[int], optional): Set of process indices that are allowed to perform checkpointing. If None, all processes are used. Defaults to None.
+            keep_every (int, optional): Additionally preserve every checkpoint whose step is a multiple of this value. Defaults to None.
 
         Raises:
             AssertionError: If the provided output_dir is not a valid GCS path.
@@ -67,31 +89,43 @@ class Checkpointer:
             raise AssertionError("output_dir must be a valid GCS path starting with gs")
 
         self.best_key = best_key
+        primary_host = 0
 
         # latest checkpointer
         self.checkpoint_dir = output_dir
         if active_processes is not None:
             assert train_mesh is not None, "train_mesh must be provided when active_processes is specified"
             init_dist_ids()
+            primary_runtime = min(active_processes)
+            primary_host = ocp_multihost.runtime_to_distributed_process_id(primary_runtime)
+            if len(active_processes) == 1:
+                allow_single_active_process()
             active_processes = {ocp_multihost.runtime_to_distributed_process_id(rt) for rt in active_processes}
+            ocp.type_handlers.register_type_handler(
+                jax.Array, ocp.type_handlers.ArrayHandler(primary_host=primary_host), override=True
+            )
             logger.info(
                 f"Initialized distributed process ID mapping for active processes: {active_processes}", log_for_all=True
             )
             directory = epath.Path(output_dir)
             logger.info(f"Active processes for checkpointing: {active_processes}")
-            if get_rank() == 0 and not directory.exists():
+            if get_rank() == primary_runtime and not directory.exists():
                 logger.info(f"Creating checkpoint directory at {directory}")
                 directory.mkdir(parents=True, exist_ok=True)
             sync_over_mesh("checkpoint_dir_sync", train_mesh)
 
-        mp_options = ocp.options.MultiprocessingOptions(primary_host=0, active_processes=active_processes)
+        mp_options = ocp.options.MultiprocessingOptions(primary_host=primary_host, active_processes=active_processes)
+        item_handlers = (lambda: make_item_handlers(mp_options)) if active_processes is not None else (lambda: None)
         self.options = ocp.CheckpointManagerOptions(
             max_to_keep=max_to_keep,
+            keep_period=keep_every,
             multiprocessing_options=mp_options,
             create=(active_processes is None),
             save_root_metadata=False,
         )
-        self.checkpoint_manager = ocp.CheckpointManager(self.checkpoint_dir, options=self.options)
+        self.checkpoint_manager = ocp.CheckpointManager(
+            self.checkpoint_dir, options=self.options, item_handlers=item_handlers()
+        )
 
         # best checkpointer
         if self.best_key:
@@ -107,7 +141,9 @@ class Checkpointer:
                 multiprocessing_options=mp_options,
                 create=(active_processes is None),
             )
-            self.best_checkpoint_manager = ocp.CheckpointManager(self.best_checkpoint_dir, options=self.best_options)
+            self.best_checkpoint_manager = ocp.CheckpointManager(
+                self.best_checkpoint_dir, options=self.best_options, item_handlers=item_handlers()
+            )
         else:
             # if no best_key, we just point to the same manager/dir
             self.best_checkpoint_dir = None
