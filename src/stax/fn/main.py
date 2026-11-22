@@ -128,7 +128,8 @@ def get_steps_fn(
     reduce_fn: Callable[[int | Array, Batch], int | Array] = lambda s, b: s + 1,
     val_steps: int = 1,
     devices: Optional[np.ndarray] = None,
-    **jit_kwargs,
+    train_jit_kwargs:dict[str, Any]={},
+    val_jit_kwargs:dict[str, Any] = {}
 ) -> Tuple[TrainFn, ValFn, Shardings]:
     """
     Creates JIT-compiled training and validation functions
@@ -165,7 +166,7 @@ def get_steps_fn(
     if sharding.opt_state_offload:
         offload_opt_state_sharding = jax.tree.map(lambda x: x.with_memory_kind("device"), shardings.opt_state_sharding)
 
-    @partial(jax.jit, out_shardings=train_shardings, **jit_kwargs)
+    @partial(jax.jit, out_shardings=train_shardings, **train_jit_kwargs)
     def train_fn(params: Params, opt_state: OptState, *batch: Batch, **loss_kwargs) -> Dict[str, Any]:
         logger.info("compiling train step fn ...")
         with jax.named_scope("train_step"):
@@ -184,7 +185,7 @@ def get_steps_fn(
             out["metrics"] = {f"train/{k}": v for k, v in out["metrics"].items()}
             return out
 
-    @partial(jax.jit, out_shardings=shardings.metrics_sharding, **jit_kwargs)
+    @partial(jax.jit, out_shardings=shardings.metrics_sharding, **val_jit_kwargs)
     def val_fn(params: Params, *batch: Batch, **loss_kwargs) -> Metrics:
         logger.info("compiling val fn ...")
         with jax.named_scope("val_step"):
