@@ -3,7 +3,7 @@ import itertools as it
 import random
 import time
 from dataclasses import dataclass
-from typing import Any, Mapping, Optional
+from typing import Any, Mapping, Optional, Sequence
 
 import jax
 import wandb
@@ -211,6 +211,8 @@ class WandBWriter(BaseMetricWriter):
         project: str,
         config: Optional[Mapping[str, Any]] = None,
         run_id: Optional[str] = None,
+        notes: Optional[str] = None,
+        tags: Optional[Sequence[str]] = None,
         **init_kwargs,
     ):
         """Initialize WandB writer.
@@ -221,12 +223,16 @@ class WandBWriter(BaseMetricWriter):
             project: WandB project name.
             config: Configuration dictionary for new run.
             run_id: ID of existing run to resume.
+            notes: Notes for a new run.
+            tags: Tags for a new run.
         """
         self.entity = entity
         self.project = project
         self.name = name
         self.config = config
         self.run_id = run_id
+        self.notes = notes
+        self.tags = list(tags) if tags is not None else None
         super().__init__(**init_kwargs)
 
     def _setup_writer(self):
@@ -247,6 +253,8 @@ class WandBWriter(BaseMetricWriter):
             init_args["id"] = str(random.randint(1, 1_000_000))
             init_args["config"] = self.config
             init_args["name"] = self.name
+            init_args["notes"] = self.notes
+            init_args["tags"] = self.tags
             logger.info(f"Starting a new WandB run with id: {init_args['id']}")
 
         self._run = wandb.init(**init_args)
