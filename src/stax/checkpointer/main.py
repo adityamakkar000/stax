@@ -20,7 +20,7 @@ def to_abstract(x: Any) -> jax.ShapeDtypeStruct | int | float:
 
 
 def init_dist_ids():
-    ocp_multihost.use_experimental_distributed_process_id = lambda: True
+    ocp_multihost.use_experimental_distributed_process_id = lambda: True # type: ignore 
 
 
 def allow_single_active_process():
@@ -30,7 +30,7 @@ def allow_single_active_process():
         def __getattr__(self, name):
             return getattr(jax, name)
 
-    jax_array_handlers.jax = ActiveProcessCount()
+    jax_array_handlers.jax = ActiveProcessCount() # type: ignore
     array_metadata_store.Validator._validate_process_count = lambda self, *, ref_process_index: None
 
 
