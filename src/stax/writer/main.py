@@ -1,6 +1,7 @@
 import abc
 import itertools as it
 import random
+import time
 from dataclasses import dataclass
 from typing import Any, Mapping, Optional
 
@@ -47,11 +48,16 @@ class BaseMetricWriter(abc.ABC):
             lag_one_step: If True, each call writes the previous step's metrics instead of the
                 current ones, so logging doesn't block on the current step's device computation.
                 The final metric is flushed in `finish()`. If False, metrics are written immediately.
+
+        Each call also records `step_time`: the wall-clock seconds since the previous call
+        (absent on the first call). It is added to the metric data, so it is printed and
+        sent to the writer backend alongside the other metrics.
         """
         self.metrics_to_print = metrics_to_print
         self.prev_metric: None | Metric = None
         self.mesh = mesh
         self.lag_one_step = lag_one_step
+        self._last_call_time: float | None = None
 
         self._run = None
         if self.is_primary_host:
@@ -77,6 +83,11 @@ class BaseMetricWriter(abc.ABC):
             table_metrics: Tables to log alongside this step's metrics.
         """
         if self.is_primary_host:
+            now = time.perf_counter()
+            if self._last_call_time is not None:
+                data = {**data, "step_time": now - self._last_call_time}
+            self._last_call_time = now
+
             cur_metrics = Metric(step, data, table_metrics)
             if self.lag_one_step:
                 self.prev_metric, metric_to_write = cur_metrics, self.prev_metric
@@ -105,7 +116,8 @@ class BaseMetricWriter(abc.ABC):
             lambda k, v: f"{k}: {convert_to_scalar(v):.4f}",
             filter(lambda kv: kv[0] in self.metrics_to_print, data.items()),
         )
-        fmt_str = " | ".join((f"Step: {step}", *metric_strs))
+        step_time_str = (f"step time: {data['step_time']:.2f}s",) if "step_time" in data else ()
+        fmt_str = " | ".join((f"Step: {step}", *metric_strs, *step_time_str))
         logger.info(fmt_str)
 
     def finish(self):
