@@ -84,6 +84,7 @@ def val_step(
     params: Params,
     batch: Batch,
     val_steps: int = 1,
+    reduce_fn: Callable[[int | Array, Batch], int | Array] = lambda s, b: s + 1,
     has_aux: bool = True,
     **loss_kwargs,
 ) -> Metrics:
@@ -94,26 +95,29 @@ def val_step(
         step_fn: The function computing loss/metrics for a single micro-batch.
         params: Current model parameters.
         batch: The input batch (potentially containing multiple micro-batches).
-        eval_steps: Number of evaluation steps (micro-batches).
+        val_steps: Number of evaluation steps (micro-batches).
+        reduce_fn: Accumulates the normalization denominator per micro-batch
+            (same semantics as in `train_step`).
         has_aux: Whether step_fn returns auxiliary metrics.
 
     Returns:
         A dictionary of averaged metrics.
     """
 
-    # carry is a placeholder for scan
-    def val_fn(_carry: None, batch: Batch) -> Tuple[None, Metrics]:
+    def val_fn(rolling_denom: int | Array, batch: Batch) -> Tuple[int | Array, Metrics]:
         out = step_fn(params, *batch, **loss_kwargs, train=False)  # type: ignore
         metrics = process_aux(out, has_aux=has_aux)
-        return _carry, metrics
+        rolling_denom = reduce_fn(rolling_denom, *batch)
+        return rolling_denom, metrics
 
-    _, metrics = jax.lax.scan(
+    rolling_denom, metrics = jax.lax.scan(
         val_fn,
-        None,  # start carry with None
+        0,
         batch,
         length=val_steps,
     )
-    metrics = jax.tree.map(lambda x: x.mean(axis=0), metrics)
+    rolling_denom = jnp.maximum(rolling_denom, 1)
+    metrics = jax.tree.map(lambda x: x.sum(axis=0) / rolling_denom, metrics)
 
     return metrics
 
@@ -194,6 +198,7 @@ def get_steps_fn(
                 params,
                 batch,
                 val_steps=val_steps,
+                reduce_fn=reduce_fn,
                 has_aux=has_aux,
                 **loss_kwargs,
             )
