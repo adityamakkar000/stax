@@ -17,23 +17,23 @@ class AXIS_NAMES(enum.StrEnum):
     TP = "tp"
 
     @classmethod
-    def model_parallel_mesh(cls):
+    def model_parallel_mesh(cls) -> tuple[str,...]:
         return (cls.FSDP, cls.TP)
 
     @classmethod
-    def data_parallel_mesh(cls):
+    def data_parallel_mesh(cls) -> tuple[str,...]:
         return (cls.DP, cls.FSDP)
 
     @classmethod
-    def context_parallel_mesh(cls):
+    def context_parallel_mesh(cls) -> tuple[str,...]:
         return (cls.CP_RING, cls.CP_ULYSSES)
 
     @classmethod
-    def data_mesh(cls):
+    def data_mesh(cls) -> tuple[str,...]:
         return (*cls.data_parallel_mesh(), *cls.context_parallel_mesh())
 
     @classmethod
-    def full_mesh(cls):
+    def full_mesh(cls) -> tuple[str,...]:
         return (*cls.data_mesh(), cls.TP)
 
 
